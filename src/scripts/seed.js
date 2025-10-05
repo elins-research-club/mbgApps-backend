@@ -1,108 +1,160 @@
 // /backend/src/scripts/seed.js
-
 const fs = require("fs");
 const path = require("path");
 const csv = require("csv-parser");
 const { PrismaClient } = require("@prisma/client");
-
 const prisma = new PrismaClient();
 
-// ... (fungsi processCsv tetap sama)
-
-// FUNGSI DIPERBARUI UNTUK MENGGANTI NAMA KATEGORI & MEMPERBAIKI SAYUR
-function getKategori(grupPangan) {
-  const grup = grupPangan ? grupPangan.toLowerCase() : "";
-  if (grup.includes("serealia") || grup.includes("umbi")) {
-    return "karbo"; // NAMA BARU
-  }
-  if (
-    grup.includes("daging") ||
-    grup.includes("ikan") ||
-    grup.includes("telur") ||
-    grup.includes("unggas")
-  ) {
-    return "lauk";
-  }
-  // Pencarian lebih fleksibel, cukup cari kata 'sayur'
-  if (grup.includes("sayur")) {
-    // DIPERBAIKI
-    return "sayur";
-  }
-  if (grup.includes("kacang") || grup.includes("polong")) {
-    return "side_dish";
-  }
-  if (grup.includes("buah") || grup.includes("susu")) {
-    return "buah";
-  }
-  return null;
-}
-
-// ... (sisa kode seed.js lainnya sama persis seperti sebelumnya)
-
-// SALIN SELURUH KODE DI BAWAH INI UNTUK MEMASTIKAN TIDAK ADA YANG TERLEWAT
-
-function processCsv(filePath) {
+function processCsv(filePath, options = {}) {
   return new Promise((resolve, reject) => {
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(filePath))
       return reject(new Error(`File tidak ditemukan: ${filePath}`));
-    }
     const results = [];
     fs.createReadStream(filePath)
-      .pipe(csv({ separator: ";", headers: false, skipLines: 1 }))
+      .pipe(csv(options))
       .on("data", (data) => results.push(data))
       .on("end", () => resolve(results))
       .on("error", (error) => reject(error));
   });
 }
 
-async function seedDatabase() {
+async function seedBahan() {
+  console.log("📚 Tahap 1: Membaca kamus gizi...");
   const nutritionFiles = [
     "bahan-gizi-1.csv",
     "bahan-gizi-2.csv",
     "bahan-gizi-3.csv",
   ];
-  console.log("\n📚 Membaca semua data pangan dari file...");
-
   for (const file of nutritionFiles) {
     const filePath = path.join(__dirname, `../data/csv/${file}`);
-    console.log(`  -> Memproses ${file}...`);
-
-    const records = await processCsv(filePath);
-
+    const records = await processCsv(filePath, {
+      separator: ";",
+      headers: false,
+      skipLines: 1,
+    });
     for (const row of records) {
-      const namaProduk = row["3"];
-      const grupPangan = row["26"];
-      const kategori = getKategori(grupPangan);
+      const namaBahan = row["3"];
+      if (!namaBahan || namaBahan.trim() === "") continue;
+      const parseValue = (value) =>
+        parseFloat(String(value).replace(",", ".")) || 0;
+      await prisma.bahan.upsert({
+        where: { nama: namaBahan.trim().toLowerCase() },
+        update: {},
+        create: {
+          nama: namaBahan.trim().toLowerCase(),
+          energi_kkal: parseValue(row["5"]),
+          protein_g: parseValue(row["6"]),
+          lemak_g: parseValue(row["7"]),
+          karbohidrat_g: parseValue(row["8"]),
+          serat_g: parseValue(row["9"]),
+          abu_g: parseValue(row["10"]),
+          kalsium_mg: parseValue(row["11"]),
+          fosfor_mg: parseValue(row["12"]),
+          besi_mg: parseValue(row["13"]),
+          natrium_mg: parseValue(row["14"]),
+          kalium_mg: parseValue(row["15"]),
+          tembaga_mg: parseValue(row["16"]),
+          seng_mg: parseValue(row["17"]),
+          retinol_mcg: parseValue(row["18"]),
+          b_kar_mcg: parseValue(row["19"]),
+          karoten_total_mcg: parseValue(row["20"]),
+          thiamin_mg: parseValue(row["21"]),
+          riboflavin_mg: parseValue(row["22"]),
+          niasin_mg: parseValue(row["23"]),
+          vitamin_c_mg: parseValue(row["24"]),
+        },
+      });
+    }
+  }
+  console.log("✅ Kamus gizi berhasil dimasukkan.");
+}
 
-      if (namaProduk && kategori) {
-        const parseValue = (value) =>
-          parseFloat(String(value).replace(",", ".")) || 0;
-
-        await prisma.produkPangan.upsert({
-          where: { nama: namaProduk.trim().toLowerCase() },
-          update: {},
-          create: {
-            nama: namaProduk.trim().toLowerCase(),
-            kategori: kategori,
-            energi_kkal: parseValue(row["5"]),
-            protein_g: parseValue(row["6"]),
-            lemak_g: parseValue(row["7"]),
-            karbohidrat_g: parseValue(row["8"]),
-          },
-        });
+async function seedMenu() {
+  console.log("🍽️ Tahap 2: Membaca daftar menu utama...");
+  const filePath = path.join(__dirname, "../data/csv/menu.csv");
+  const records = await processCsv(filePath, { headers: false, skipLines: 1 });
+  const kategoriMapping = {
+    "Karbohidrat": "karbo",
+    "Protein hewani": "lauk",
+    "Sayuran": "sayur",
+    "Protein tambahan": "side_dish",
+    "Buah": "buah",
+  };
+  for (const row of records) {
+    const kategori = kategoriMapping[row["0"]];
+    if (kategori) {
+      for (let i = 2; i < Object.keys(row).length; i++) {
+        const namaMenu = row[String(i)];
+        if (namaMenu && namaMenu.trim() !== "") {
+          await prisma.menu.upsert({
+            where: { nama: namaMenu.trim().toLowerCase() },
+            update: {},
+            create: { nama: namaMenu.trim().toLowerCase(), kategori: kategori },
+          });
+        }
       }
     }
   }
-  console.log("✅ Semua data pangan berhasil dimasukkan.");
+  console.log("✅ Daftar menu berhasil dimasukkan.");
+}
+
+async function seedResep() {
+  console.log("🍳 Tahap 3: Membaca semua resep...");
+  const recipeFiles = [
+    "nasi-putih.csv",
+    "protein.csv",
+    "sayuran.csv",
+    "protein-tambahan.csv",
+    "buahSusu.csv",
+  ];
+  for (const file of recipeFiles) {
+    const filePath = path.join(__dirname, `../data/csv/${file}`);
+    const rows = await processCsv(filePath, { headers: false });
+    let currentRecipeName = null;
+    for (const row of rows) {
+      const fullLine = Object.values(row).join(",");
+      if (fullLine.includes("Receipe Name")) {
+        const parts = fullLine.split(":");
+        if (parts.length > 1)
+          currentRecipeName = parts[1].replace(/,/g, "").trim().toLowerCase();
+        continue;
+      }
+      const isIngredientRow = !isNaN(parseInt(row["0"]));
+      const ingredientName = row["1"];
+      const quantity = parseFloat(row["3"]);
+      if (
+        currentRecipeName &&
+        isIngredientRow &&
+        ingredientName &&
+        !isNaN(quantity)
+      ) {
+        const menu = await prisma.menu.findUnique({
+          where: { nama: currentRecipeName },
+        });
+        const bahan = await prisma.bahan.findUnique({
+          where: { nama: ingredientName.trim().toLowerCase() },
+        });
+        if (menu && bahan) {
+          await prisma.resep.create({
+            data: { menu_id: menu.id, bahan_id: bahan.id, gramasi: quantity },
+          });
+        }
+      }
+    }
+  }
+  console.log("✅ Semua resep berhasil dihubungkan.");
 }
 
 async function main() {
   console.log("--- MENGHAPUS DATA LAMA ---");
-  await prisma.produkPangan.deleteMany({});
-
-  console.log("--- MEMULAI PROSES DATABASE SEEDING (SISTEM BARU) ---");
-  await seedDatabase();
-  console.log("\n🎉 Seeding dengan sistem baru selesai!");
+  await prisma.resep.deleteMany({});
+  await prisma.menu.deleteMany({});
+  await prisma.bahan.deleteMany({});
+  console.log("--- MEMULAI PROSES SEEDING ---");
+  await seedBahan();
+  await seedMenu();
+  await seedResep();
+  console.log("\n🎉 Seeding selesai!");
 }
 
 main()

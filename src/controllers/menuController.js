@@ -1,96 +1,106 @@
 // /backend/src/controllers/menuController.js
-
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const getMenus = async (req, res) => {
   try {
-    const allProducts = await prisma.produkPangan.findMany({
-      orderBy: { nama: "asc" },
-    });
-
-    const groupedProducts = allProducts.reduce(
-      (acc, product) => {
-        const { kategori, id, nama } = product;
-        if (acc[kategori]) {
-          acc[kategori].push({ id, nama });
-        }
+    const allMenus = await prisma.menu.findMany({ orderBy: { nama: "asc" } });
+    const groupedMenus = allMenus.reduce(
+      (acc, menu) => {
+        if (acc[menu.kategori])
+          acc[menu.kategori].push({ id: menu.id, nama: menu.nama });
         return acc;
       },
       { karbo: [], lauk: [], sayur: [], side_dish: [], buah: [] }
-    ); // DIUBAH
-
-    res.status(200).json(groupedProducts);
+    );
+    res.status(200).json(groupedMenus);
   } catch (error) {
-    console.error("Error saat mengambil produk pangan:", error);
-    res.status(500).json({ message: "Terjadi kesalahan pada server" });
+    console.error("Error saat mengambil menu:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
 const generateNutrition = async (req, res) => {
   try {
-    // Ubah nama properti dari nasi_id menjadi karbo_id
     const { karbo_id, lauk_id, sayur_id, side_dish_id, buah_id } = req.body;
-    const selectedIds = [
-      karbo_id,
-      lauk_id,
-      sayur_id,
-      side_dish_id,
-      buah_id,
-    ].map((id) => parseInt(id));
+    const selectedIds = [karbo_id, lauk_id, sayur_id, side_dish_id, buah_id]
+      .filter((id) => id)
+      .map((id) => parseInt(id));
+    if (selectedIds.length === 0)
+      return res.status(400).json({ message: "Tidak ada menu yang dipilih." });
 
-    const selectedProducts = await prisma.produkPangan.findMany({
-      where: { id: { in: selectedIds } },
+    const recipes = await prisma.resep.findMany({
+      where: { menu_id: { in: selectedIds } },
+      include: { bahan: true },
     });
 
     let totalGizi = {
-      energi_total_kkal: 0,
+      energi_kkal: 0,
       protein_g: 0,
       lemak_g: 0,
-      karbohidrat_total_g: 0,
+      karbohidrat_g: 0,
+      serat_g: 0,
+      abu_g: 0,
+      kalsium_mg: 0,
+      fosfor_mg: 0,
+      besi_mg: 0,
+      natrium_mg: 0,
+      kalium_mg: 0,
+      tembaga_mg: 0,
+      seng_mg: 0,
+      retinol_mcg: 0,
+      b_kar_mcg: 0,
+      karoten_total_mcg: 0,
+      thiamin_mg: 0,
+      riboflavin_mg: 0,
+      niasin_mg: 0,
+      vitamin_c_mg: 0,
     };
+    let totalGramasi = 0;
 
-    selectedProducts.forEach((product) => {
-      totalGizi.energi_total_kkal += product.energi_kkal || 0;
-      totalGizi.protein_g += product.protein_g || 0;
-      totalGizi.lemak_g += product.lemak_g || 0;
-      totalGizi.karbohidrat_total_g += product.karbohidrat_g || 0;
+    recipes.forEach((resep) => {
+      const { gramasi, bahan } = resep;
+      if (!bahan) return;
+      totalGramasi += gramasi;
+      const ratio = gramasi / 100;
+      for (const key in totalGizi) {
+        if (bahan[key] !== null && bahan[key] !== undefined) {
+          totalGizi[key] += (bahan[key] || 0) * ratio;
+        }
+      }
     });
 
-    const response = {
-      takaran_saji_g: 100 * selectedProducts.length,
-      informasi_nilai_gizi: {
-        energi_total_kkal: parseFloat(totalGizi.energi_total_kkal.toFixed(1)),
-        energi_dari_lemak_kkal: parseFloat((totalGizi.lemak_g * 9).toFixed(1)),
-        lemak_total_g: parseFloat(totalGizi.lemak_g.toFixed(1)),
-        protein_g: parseFloat(totalGizi.protein_g.toFixed(1)),
-        karbohidrat_total_g: parseFloat(
-          totalGizi.karbohidrat_total_g.toFixed(1)
-        ),
-        natrium_mg: 0,
-      },
-      persen_akg: {
-        lemak_total: `${Math.round((totalGizi.lemak_g / 67) * 100)}%`,
-        protein: `${Math.round((totalGizi.protein_g / 60) * 100)}%`,
-        karbohidrat_total: `${Math.round(
-          (totalGizi.karbohidrat_total_g / 300) * 100
-        )}%`,
-        natrium: "0%",
-      },
-      detail_menu_terpilih: selectedProducts.map((p) => ({
-        kategori: p.kategori,
-        nama: p.nama,
-      })),
+    for (const key in totalGizi)
+      totalGizi[key] = parseFloat(totalGizi[key].toFixed(2));
+
+    const calculateAkg = (value, dailyValue) => {
+      if (!dailyValue || !value) return "0%";
+      const percentage = (value / dailyValue) * 100;
+      if (percentage > 0 && percentage < 1) return "<1%";
+      return `${Math.round(percentage)}%`;
     };
 
+    const response = {
+      takaran_saji_g: parseFloat(totalGramasi.toFixed(2)),
+      informasi_nilai_gizi: {
+        ...totalGizi,
+        energi_dari_lemak_kkal: parseFloat((totalGizi.lemak_g * 9).toFixed(2)),
+      },
+      persen_akg: {
+        lemak_total: calculateAkg(totalGizi.lemak_g, 67),
+        protein: calculateAkg(totalGizi.protein_g, 60),
+        karbohidrat_total: calculateAkg(totalGizi.karbohidrat_g, 300),
+        natrium: calculateAkg(totalGizi.natrium_mg, 1500),
+        kalsium: calculateAkg(totalGizi.kalsium_mg, 1200),
+        besi: calculateAkg(totalGizi.besi_mg, 18),
+        vitamin_c: calculateAkg(totalGizi.vitamin_c_mg, 90),
+      },
+    };
     res.status(200).json(response);
   } catch (error) {
     console.error("Error saat generate nutrisi:", error);
-    res.status(500).json({ message: "Terjadi kesalahan pada server" });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-module.exports = {
-  getMenus,
-  generateNutrition,
-};
+module.exports = { getMenus, generateNutrition };
