@@ -1,0 +1,223 @@
+  Receipe Name,,: kacang panjang tumis,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,kacang panjang,gram,50,,  -   
+2,garam,gram,1,,  -   
+3,minyak goreng,ml,10,,  -   
+4,gula,gram,2,,  -   
+5,penyedap,ml,3,,  -   
+6,bawang putih,gram,3,,  -   
+7,bawang merah,gram,5,,  -   
+,,,,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: jagung & wotel tumis,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,wortel,gram,40,,  -   
+2,jagung,gram,30,,  -   
+3,minyak goreng,ml,10,,  -   
+4,penyedap,ml,3,,  -   
+5,bawang putih,gram,3,,  -   
+6,bawang merah,gram,5,,  -   
+7,garam,gram,1,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+  Receipe Name,,:bayam labu  sayur bening,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,bayam,gram,40,,  -   
+2,jagung,gram,40,,  -   
+3,air,ml,10,,  -   
+4,penyedap,ml,3,,  -   
+5,bawang putih,gram,3,,  -   
+6,bawang merah,gram,5,,  -   
+7,daun salam,gram,1,,  -   
+8,garam,gram,2,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+  Receipe Name,,":wortel, sawi putih tumis",,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,sawi putih,gram,40,,  -   
+2,wortel,gram,30,,  -   
+3,penyedap,gram,2,,  -   
+4,bawang putih,gram,2,,  -   
+5,bawang merah,gram,3,,  -   
+6,garam,gram,2,,
+7,minyak goreng,gram,5,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+  Receipe Name,,:sayur orak arik,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,kol putih,gram,30,,  -   
+2,wortel,gram,40,,  -   
+,buncis,gram,40,,
+3,penyedap,gram,2,,  -   
+4,bawang putih,gram,3,,  -   
+5,telur,gram,40,,  -   
+6,garam,gram,1,,
+7,minyak goreng,gram,5,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,:sayur mix tumis,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,sayur mix,gram,50,,  -   
+2,penyedap,gram,30,,  -   
+3,bawang putih,gram,2,,  -   
+4,garam,gram,2,,  -   
+5,minyak goreng,gram,3,,  -   
+6,,,,,
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,caisim wortel  tumis,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,caisim,gram,30,,  -   
+2,wortel,gram,40,,  -   
+3,penyedap,gram,2,,  -   
+4,bawang putih,gram,3,,  -   
+5,garam,gram,1,,  -   
+6,minyak goreng,gram,10,,
+7,,,,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,":wortel, labu tumis",,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,labu,gram,30,,  -   
+2,wortel,gram,30,,  -   
+3,penyedap,gram,2,,  -   
+4,bawang putih,gram,2,,  -   
+5,bawang merah,gram,3,,  -   
+6,garam,gram,2,,
+7,minyak goreng,gram,5,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,:bayam sayur bening,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,bayam,gram,30,,  -   
+2,jagung,gram,30,,  -   
+3,garam,gram,2,,
+4,bawang merah,gram,5,,
+5,daun salam,gram,1,,
+6,penydap,gram,5,,
+7,garam,gram,2,,
+,,,,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,:labu tumis,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,labu,gram,30,,  -   
+2,penyedap,gram,2,,  -   
+3,bawang putih,gram,2,,  -   
+4,bawang merah,gram,3,,  -   
+5,garam,gram,2,,
+6,minyak goreng,gram,5,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,":caisim, wortel tumis",,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,caisim,gram,30,,  -   
+2,wortel,gram,30,,  -   
+3,bawang putih,gram,2,,  -   
+4,garam,gram,3,,  -   
+5,minyak goreng,gram,2,,
+,,,,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,":oyong,soun sayur bening",,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,oyong,gram,40,,  -   
+2,air,ml,10,,  -   
+3,penyedap,ml,3,,  -   
+4,bawang putih,gram,3,,  -   
+5,bawang merah,gram,5,,  -   
+6,daun salam,gram,1,,  -   
+7,soun,gram,5,,  -   
+8,garam,gram,2,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,:sayur 3 warna tumis,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,sayur mix,gram,50,,  -   
+2,penyedap,gram,30,,  -   
+3,bawang putih,gram,2,,  -   
+4,garam,gram,3,,  -   
+5,merica,gram,1,,  -   
+6,minyak goreng,gram,3,,
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,": timun, wortel stick",,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,timun,gram,30,,  -   
+2,wortel,gram,30,,  -   
+3,gula,gram,10,,  -   
+4,garam,gram,2,,  -   
+5,cuka,ml,1,,
+,,,,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+  Receipe Name,,:sayuran tofu,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,sawi putih,gram,20,,  -   
+2,wortel,gram,20,,  -   
+3,kubis,gram,20,,
+4,caisim,gram,20,,
+5,penyedap,gram,2,,
+6,bawang putih,,5,,
+7,garam,gram,2,,  -   
+8,merica,gram,2,,  -   
+9,garam,gram,2,,
+10,tofu,pc,0.25,,
+11,minyak goreng,gram,5,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   

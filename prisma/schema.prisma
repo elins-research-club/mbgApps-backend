@@ -1,0 +1,23 @@
+// /backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Model tunggal untuk semua produk pangan (bahan baku & menu jadi)
+model ProdukPangan {
+  id              Int     @id @default(autoincrement())
+  nama            String  @unique
+  kategori        String  // 'nasi', 'lauk', 'sayur', 'side_dish', 'buah'
+  
+  // Kolom Gizi Lengkap
+  energi_kkal     Float? @default(0)
+  protein_g       Float? @default(0)
+  lemak_g         Float? @default(0)
+  karbohidrat_g   Float? @default(0)
+}

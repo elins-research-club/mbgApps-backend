@@ -1,0 +1,186 @@
+  Receipe Name,,: tahu goreng tepung,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tahu,gram,50,,  -   
+2,bawang putih,gram,5,,
+3,ketumbar bubuk,gram,1,,
+4,penyedap,gram,2,,
+5,garam,gram,1,,  -   
+6,daun bawang,gram,3,,
+7,tepung S biru,gram,10,,
+8,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: tempe goreng ,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tempe,gram,50,,  -   
+2,bawang putih,gram,5,,
+3,ketumbar bubuk,gram,2,,
+4,penyedap,gram,2,,
+5,garam,gram,1,,  -   
+6,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+  Receipe Name,,: tahu bola/perkedel,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+  Outlet,,: TE - ALA CARTE ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tahu,gram,50,,  -   
+2,bawang putih,gram,5,,
+3,ketumbar bubuk,gram,1,,
+4,penyedap,gram,2,,
+5,garam,gram,1,,  -   
+6,daun bawang,gram,3,,
+7,telur,gram,30,,
+8,tepung S biru,gram,10,,
+9,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: tempe orek,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tempe,gram,50,,  -   
+2,bawang putih,gram,3,,
+3,bawang merah,gram,5,,
+4,penyedap,gram,2,,
+5,kecap,gram,5,,
+6,garam,gram,2,,  -   
+7,daun salam,gram,1,,
+8,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: tahu kuning,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tahu,gram,50,,  -   
+2,bawang putih,gram,2,,
+3,bawang merah,gram,3,,
+4,ketumbar bubuk,gram,1,,
+5,penyedap,gram,2,,
+6,garam,gram,1,,  -   
+7,kunyit bubuk,gram,2,,
+8,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+  Receipe Name,,: tempe mendoan,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tempe,gram,50,,  -   
+2,bawang putih,gram,5,,
+3,ketumbar bubuk,gram,1,,
+4,penyedap,gram,2,,
+5,garam,gram,1,,  -   
+6,daun bawang,gram,3,,
+7,tepung S biru,gram,10,,
+8,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: tahu gulai,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tahu,gram,50,,  -   
+2,bawang putih,gram,2,,
+3,bawang merah,gram,3,,
+4,kunyit bubuk,gram,1,,
+5,penyedap,gram,2,,
+6,garam,gram,1,,  -   
+7,daun salam,gram,2,,
+8,lengkuas,gram,2,,
+9,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: tahu kecap,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tahu,gram,50,,  -   
+2,bawang putih,gram,2,,
+3,bawang merah,gram,3,,
+4,kemiri,gram,1,,
+5,penyedap,gram,2,,
+6,garam,gram,1,,  -   
+7,daun salam,gram,2,,
+8,kecap,gram,10,,
+9,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: krupuk udang,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,krupuk finna,pack,1,,  -   
+,,,,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: tempe kari,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tempe,gram,50,,  -   
+2,bawang putih,gram,2,,
+3,bawang merah,gram,3,,
+4,kunyit bubuk,gram,1,,
+5,penyedap,gram,2,,
+6,garam,gram,1,,  -   
+7,daun salam,gram,0,,
+8,lengkuas,gram,2,,
+9,minyak goreng,ml,10,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: tempe bawang putih,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tempe,gram,50,,  -   
+2,bawang putih,gram,2,,
+3,penyedap,gram,2,,
+4,garam,gram,1,,  -   
+5,daun salam,gram,1,,
+6,lengkuas,gram,2,,
+7,minyak goreng,ml,10,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
+,,,,,
+,,,,,
+  Receipe Name,,: tempe bacem,,,
+  Course,,: 1 portion,,,
+  Quantity Produced,,: ,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,tempe,gram,50,,  -   
+2,bawang putih,gram,2,,
+3,bawang merah,gram,5,,
+4,penyedap,gram,2,,
+5,gula merah,gram,20,,
+6,ketumbar,gram,2,,
+7,garam,gram,1,,  -   
+8,daun salam,gram,1,,
+9,lengkuas,gram,5,,
+10,minyak goreng,ml,20,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
