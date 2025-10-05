@@ -1,0 +1,7 @@
+  Receipe Name,,:Nasi putih,,,
+No,Ingredient,Unit,Qty,Unit Cost,Total Cost
+,,,[ a ],[ b ],[ c ] = a x b
+1,beras ,gram,50,"  15,000.00 ",  750 
+2,air,ml,50,"  5,000.00 ",  250 
+3,,,,,  -   
+  Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,"  1,000 "
