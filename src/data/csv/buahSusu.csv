@@ -1,19 +1,19 @@
-  Receipe Name,,:PISANG,,,
+  Receipe Name,,:pisang,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
 ,,,[ a ],[ b ],[ c ] = a x b
-1,pisang mauli,pc,2,,  -   
+1,pisang uli,pc,2,,  -   
 ,,,,,  -   
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
 ,,,,,
 ,,,,,
-  Receipe Name,,:JERUK,,,
+  Receipe Name,,:jeruk,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
 ,,,[ a ],[ b ],[ c ] = a x b
-1,JERUK,gram,80,,  -   
+1,jeruk,gram,80,,  -   
 ,,,,,  -   
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
 ,,,,,
-  Receipe Name,,:Semangka,,,
+  Receipe Name,,:semangka,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
 ,,,[ a ],[ b ],[ c ] = a x b
 1,semangka,gram,80,,  -   
@@ -21,10 +21,10 @@ No,Ingredient,Unit,Qty,Unit Cost,Total Cost
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
 ,,,,,
 ,,,,,
-  Receipe Name,,:Susu,,,
+  Receipe Name,,:susu,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
 ,,,[ a ],[ b ],[ c ] = a x b
-1,susu uht,pc,1,,  -   
+1,susu,pc,1,,  -   
 ,,,,,  -   
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
 ,,,,,
@@ -48,6 +48,6 @@ No,Ingredient,Unit,Qty,Unit Cost,Total Cost
   Receipe Name,,:anggur,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
 ,,,[ a ],[ b ],[ c ] = a x b
-1,kelengkeng,gram,50,,  -   
+1,anggur,gram,50,,  -   
 ,,,,,  -   
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   

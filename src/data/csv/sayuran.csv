@@ -1,4 +1,4 @@
-  Receipe Name,,: kacang panjang tumis,,,
+  Receipe Name,,: tumis kacang panjang,,,
   Course,,: 1 portion,,,
   Quantity Produced,,: ,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
@@ -14,7 +14,7 @@ No,Ingredient,Unit,Qty,Unit Cost,Total Cost
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
 ,,,,,
 ,,,,,
-  Receipe Name,,: jagung & wotel tumis,,,
+  Receipe Name,,: tumis jagung & wortel,,,
   Course,,: 1 portion,,,
   Quantity Produced,,: ,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
@@ -28,7 +28,7 @@ No,Ingredient,Unit,Qty,Unit Cost,Total Cost
 7,garam,gram,1,,  -   
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
 ,,,,,
-  Receipe Name,,:bayam labu  sayur bening,,,
+  Receipe Name,,:bayam labu sayur bening,,,
   Course,,: 1 portion,,,
   Quantity Produced,,: ,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
@@ -43,7 +43,7 @@ No,Ingredient,Unit,Qty,Unit Cost,Total Cost
 8,garam,gram,2,,  -   
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
 ,,,,,
-  Receipe Name,,":wortel, sawi putih tumis",,,
+  Receipe Name,,":tumis wortel & sawi putih",,,
   Course,,: 1 portion,,,
   Quantity Produced,,: ,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost
@@ -87,7 +87,7 @@ No,Ingredient,Unit,Qty,Unit Cost,Total Cost
   Grand Total Cost [ d ] = Sum of Coloum [ c ],,,,,  -   
 ,,,,,
 ,,,,,
-  Receipe Name,,caisim wortel  tumis,,,
+  Receipe Name,,tumis caisim wortel,,,
   Course,,: 1 portion,,,
   Quantity Produced,,: ,,,
 No,Ingredient,Unit,Qty,Unit Cost,Total Cost

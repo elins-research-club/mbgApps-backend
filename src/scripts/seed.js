@@ -1,9 +1,35 @@
-// /backend/src/scripts/seed.js
 const fs = require("fs");
 const path = require("path");
 const csv = require("csv-parser");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+
+// KAMUS ALIAS BAHAN
+const bahanAliasMapping = {
+  "minyak goreng": "minyak kelapa sawit",
+  "kecap manis": "kecap",
+  "bawang bombay": "bawang bombai",
+  "telur": "telur ayam",
+  "ayam": "daging ayam, mentah",
+  "sapi": "daging sapi, mentah",
+  "udang": "udang, segar",
+  "cumi": "cumi-cumi, segar",
+  "ikan": "ikan segar",
+  "beras": "beras giling, mentah",
+  "gula": "gula pasir",
+  "cabe": "cabai merah",
+  "cabe rawit": "cabai rawit",
+};
+
+// --- FUNGSI PEMBERSIH SUPER ---
+// Fungsi ini akan menormalkan semua string untuk menghilangkan karakter "hantu"
+function cleanString(str) {
+  if (typeof str !== "string") return "";
+  // 1. Ganti semua jenis spasi (termasuk yang tak terlihat) dengan spasi biasa
+  // 2. Hapus spasi di awal dan akhir
+  // 3. Ubah ke huruf kecil
+  return str.replace(/\s+/g, " ").trim().toLowerCase();
+}
 
 function processCsv(filePath, options = {}) {
   return new Promise((resolve, reject) => {
@@ -33,15 +59,15 @@ async function seedBahan() {
       skipLines: 1,
     });
     for (const row of records) {
-      const namaBahan = row["3"];
-      if (!namaBahan || namaBahan.trim() === "") continue;
+      const namaBahan = cleanString(row["3"]); // Gunakan pembersih
+      if (!namaBahan) continue;
       const parseValue = (value) =>
         parseFloat(String(value).replace(",", ".")) || 0;
       await prisma.bahan.upsert({
-        where: { nama: namaBahan.trim().toLowerCase() },
+        where: { nama: namaBahan },
         update: {},
         create: {
-          nama: namaBahan.trim().toLowerCase(),
+          nama: namaBahan,
           energi_kkal: parseValue(row["5"]),
           protein_g: parseValue(row["6"]),
           lemak_g: parseValue(row["7"]),
@@ -69,8 +95,10 @@ async function seedBahan() {
   console.log("✅ Kamus gizi berhasil dimasukkan.");
 }
 
+// --- FUNGSI DENGAN PERBAIKAN: MENAMBAHKAN 'return allMenus' ---
 async function seedMenu() {
   console.log("🍽️ Tahap 2: Membaca daftar menu utama...");
+  const allMenus = [];
   const filePath = path.join(__dirname, "../data/csv/menu.csv");
   const records = await processCsv(filePath, { headers: false, skipLines: 1 });
   const kategoriMapping = {
@@ -84,22 +112,24 @@ async function seedMenu() {
     const kategori = kategoriMapping[row["0"]];
     if (kategori) {
       for (let i = 2; i < Object.keys(row).length; i++) {
-        const namaMenu = row[String(i)];
-        if (namaMenu && namaMenu.trim() !== "") {
+        const namaMenu = cleanString(row[String(i)]); // Gunakan pembersih
+        if (namaMenu) {
+          allMenus.push(namaMenu);
           await prisma.menu.upsert({
-            where: { nama: namaMenu.trim().toLowerCase() },
+            where: { nama: namaMenu },
             update: {},
-            create: { nama: namaMenu.trim().toLowerCase(), kategori: kategori },
+            create: { nama: namaMenu, kategori: kategori },
           });
         }
       }
     }
   }
   console.log("✅ Daftar menu berhasil dimasukkan.");
+  return allMenus;
 }
 
 async function seedResep() {
-  console.log("🍳 Tahap 3: Membaca semua resep...");
+  console.log("🍳 Tahap 3: Membaca dan menghubungkan semua resep...");
   const recipeFiles = [
     "nasi-putih.csv",
     "protein.csv",
@@ -107,6 +137,7 @@ async function seedResep() {
     "protein-tambahan.csv",
     "buahSusu.csv",
   ];
+  const successfullyLinkedMenus = new Set();
   for (const file of recipeFiles) {
     const filePath = path.join(__dirname, `../data/csv/${file}`);
     const rows = await processCsv(filePath, { headers: false });
@@ -116,33 +147,40 @@ async function seedResep() {
       if (fullLine.includes("Receipe Name")) {
         const parts = fullLine.split(":");
         if (parts.length > 1)
-          currentRecipeName = parts[1].replace(/,/g, "").trim().toLowerCase();
+          currentRecipeName = cleanString(parts[1].replace(/,/g, "")); // Gunakan pembersih
         continue;
       }
       const isIngredientRow = !isNaN(parseInt(row["0"]));
-      const ingredientName = row["1"];
+      const originalIngredientName = cleanString(row["1"]); // Gunakan pembersih
       const quantity = parseFloat(row["3"]);
       if (
         currentRecipeName &&
         isIngredientRow &&
-        ingredientName &&
+        originalIngredientName &&
         !isNaN(quantity)
       ) {
+        const finalIngredientName =
+          bahanAliasMapping[originalIngredientName] || originalIngredientName;
         const menu = await prisma.menu.findUnique({
           where: { nama: currentRecipeName },
         });
-        const bahan = await prisma.bahan.findUnique({
-          where: { nama: ingredientName.trim().toLowerCase() },
+        let bahan = await prisma.bahan.findUnique({
+          where: { nama: finalIngredientName },
         });
+        if (!bahan)
+          bahan = await prisma.bahan.findFirst({
+            where: { nama: { startsWith: finalIngredientName } },
+          });
         if (menu && bahan) {
           await prisma.resep.create({
             data: { menu_id: menu.id, bahan_id: bahan.id, gramasi: quantity },
           });
+          successfullyLinkedMenus.add(menu.nama);
         }
       }
     }
   }
-  console.log("✅ Semua resep berhasil dihubungkan.");
+  return successfullyLinkedMenus;
 }
 
 async function main() {
@@ -152,9 +190,29 @@ async function main() {
   await prisma.bahan.deleteMany({});
   console.log("--- MEMULAI PROSES SEEDING ---");
   await seedBahan();
-  await seedMenu();
-  await seedResep();
-  console.log("\n🎉 Seeding selesai!");
+  const allMenusInDb = await seedMenu();
+  const linkedMenus = await seedResep();
+
+  console.log("\n\n--- LAPORAN HASIL SEEDING ---");
+  console.log(
+    `✅ Total menu di daftar utama (menu.csv): ${allMenusInDb.length}`
+  );
+  console.log(
+    `🔗 Total menu yang berhasil terhubung dengan resep: ${linkedMenus.size}`
+  );
+  const unlinkedMenus = allMenusInDb.filter((menu) => !linkedMenus.has(menu));
+  if (unlinkedMenus.length > 0) {
+    console.error(
+      `\n❌ DITEMUKAN ${unlinkedMenus.length} MENU YANG RESEPNYA TIDAK ADA:`
+    );
+    unlinkedMenus.forEach((menu) => console.log(`  - ${menu}`));
+    console.error(
+      "\nSOLUSI: Pastikan nama menu di atas sama persis dengan 'Receipe Name' di dalam file CSV resep yang sesuai."
+    );
+  } else {
+    console.log("🎉 Selamat! Semua menu berhasil terhubung dengan resepnya.");
+  }
+  console.log("--- -------------------- ---\n");
 }
 
 main()
