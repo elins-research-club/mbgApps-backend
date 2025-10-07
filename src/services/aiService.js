@@ -10,23 +10,32 @@ const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
 async function getAiSuggestion(newMenuName, existingMenus) {
   const prompt = `
-    Anda adalah seorang ahli gizi dan koki profesional. Tugas Anda adalah menganalisis nama menu baru dan memberikan saran resep berdasarkan menu yang sudah ada.
+    Anda adalah seorang ahli gizi dan koki profesional yang memiliki akses ke database TKPI (Tabel Komposisi Pangan Indonesia).
+    Tugas Anda adalah membuat rekomendasi menu baru berdasarkan nama menu yang diberikan.
 
     Nama Menu Baru: "${newMenuName}"
 
-    Tugas:
-    1.  Tentukan **kategori** yang paling cocok untuk menu ini dari daftar berikut: [karbo, lauk, sayur, side_dish, buah].
-    2.  Pilih satu **menu yang paling mirip** dari daftar menu yang sudah ada ini sebagai dasar resepnya: [${existingMenus.join(
-      ", "
-    )}].
+    Panduan tugas:
+    1. Analisis nama menu di atas dan tentukan **kategori** yang paling sesuai dari daftar berikut:
+      [karbo, lauk, sayur, side_dish, buah].
+    2. Buat **resep/menu baru** yang terinspirasi dari bahan-bahan yang mirip di database TKPI.
+      - Jika bahan-bahan mirip tersedia di database TKPI, gunakan bahan-bahan tersebut untuk membentuk menu baru.
+      - Jika bahan-bahan mirip tidak tersedia sama sekali, maka pilih satu **menu yang paling mirip** dari daftar berikut
+       sebagai referensi: [${existingMenus.join(", ")}].
+    3. Jika Anda menggunakan menu yang mirip sebagai referensi, tetap tuliskan alasannya secara ringkas di field "note".
 
-    Berikan jawaban Anda HANYA dalam format JSON yang valid, tanpa teks tambahan apapun sebelum atau sesudahnya. Contoh format:
-    {
+    Berikan hasil dalam format JSON **valid**, tanpa teks tambahan, komentar, atau markdown apapun.
+
+    Contoh format:
+{
       "new_menu_name": "${newMenuName.toLowerCase()}",
       "suggested_category": "lauk",
-      "similar_menu_name": "nama menu yang paling mirip"
-    }
-  `;
+      "reference_type": "based_on_similar_ingredients", // atau "similar_menu_fallback"
+      "reference_menu_name": "nama menu dari existingMenus jika pakai fallback, jika tidak tulis null",
+      "suggested_ingredients": ["daftar", "bahan", "utama", "hasil", "analisis"],
+      "note": "deskripsi singkat alasan pemilihan bahan atau fallback"
+}
+`;
 
   try {
     // panggil model (pakai cara yang sebelumnya bekerja di projectmu)
