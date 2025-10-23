@@ -31,12 +31,14 @@ model Bahan {
   niasin_mg       Float? @default(0)
   vitamin_c_mg    Float? @default(0)
 }
+
 model Menu {
   id        Int      @id @default(autoincrement())
   nama      String   @unique
   kategori  String
   resep     Resep[]
 }
+
 model Resep {
   id        Int     @id @default(autoincrement())
   menu_id   Int
