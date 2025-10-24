@@ -18,7 +18,8 @@
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
     "dotenv": "^17.2.3",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "papaparse": "^5.5.3"
   },
   "devDependencies": {
     "prisma": "^6.16.3"
