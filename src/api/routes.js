@@ -7,7 +7,9 @@ const {
   suggestMenu,
   searchMenus,
 } = require("../controllers/menuController");
-const {estimateIngredientWithLLM } = require("../controllers/getIngredients")
+const { suggestMenuStream } = require("../controllers/streamController");
+const { getIngredients, getNotValidatedIngredients, editIngredientsNutritions, deleteIngredients, addIngredients } = require("../controllers/ingredientController")
+
 const router = express.Router();
 
 router.get("/menus", getMenus); // Bisa dihapus nanti, tapi biarkan dulu
@@ -16,16 +18,10 @@ router.post("/suggest-menu", suggestMenu);
 
 router.get("/search", searchMenus);
 router.post("/suggest-menu-stream", suggestMenuStream);
-router.post("/get-ingredients", async (req, res) => {
-  try {
-    const name = (req && req.body && req.body.name) || req.query.name;
-    if (!name) return res.status(400).json({ error: 'Missing `name` in body or query' });
-    const result = await estimateIngredientWithLLM(name);
-    return res.json(result);
-  } catch (err) {
-    console.error('Error in /get-ingredients route:', err);
-    return res.status(500).json({ error: String(err) });
-  }
-});
+router.post("/ingredients", addIngredients);
+router.post("/ingredients/get-ingredients", getIngredients); // POST bcz we need the name in req.body
+router.get("/ingredients/get-not-validated", getNotValidatedIngredients);
+router.put("/ingredients/:id", editIngredientsNutritions);
+router.delete("/ingredients/:id", deleteIngredients);
 
 module.exports = router;
