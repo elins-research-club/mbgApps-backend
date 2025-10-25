@@ -141,6 +141,19 @@ async function estimateIngredientWithLLM(ingredientName) {
         estimated[n] = Number((estimated[n] || 0).toFixed(4));
       });
 
+      try {
+        const savedBahan = await prisma.bahan.create({
+          data: {
+            nama: ingredientName,
+            isValidated: false,
+            ...estimated
+          }
+        });
+        console.log(`✅ Saved LLM-predicted ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`);
+      } catch (saveError) {
+        console.error(`❌ Failed to save ingredient "${ingredientName}" to database:`, saveError.message);
+      }
+
       return {
         name: ingredientName,
         method: 'llm-candidates',
