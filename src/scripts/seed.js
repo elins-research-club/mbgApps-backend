@@ -142,7 +142,7 @@ async function seedBahan () {
           thiamin_mg: parseValue(row['21']),
           riboflavin_mg: parseValue(row['22']),
           niasin_mg: parseValue(row['23']),
-          vitamin_c_mg: parseValue(row['24'])
+          vitamin_c_mg: parseValue(row['24']),
           isValidated: true,
         }
       })
