@@ -1,5 +1,5 @@
-# Ignore Prisma generated files
+node_modules
 /src/generated/prisma
-
-# Ignore node modules
-node_modules/
+prisma/migrations
+.env
+*.db

@@ -30,6 +30,7 @@ model Bahan {
   riboflavin_mg   Float? @default(0)
   niasin_mg       Float? @default(0)
   vitamin_c_mg    Float? @default(0)
+  isValidated     Boolean? @default(false)
 }
 
 model Menu {
