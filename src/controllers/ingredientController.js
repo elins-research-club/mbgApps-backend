@@ -342,6 +342,49 @@ async function getIngredients(req, res) {
   }
 }
 
+async function searchIngredients(req, res) {
+  try {
+    const { q } = req.query;
+
+    // Validate query parameter
+    if (!q || typeof q !== 'string' || q.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: "Search query 'q' is required and must be a non-empty string"
+      });
+    }
+
+    // Get all ingredients from database
+    const allIngredients = await prisma.bahan.findMany({
+      select: {
+        id: true,
+        nama: true,
+      }
+    });
+
+    // Filter ingredients that contain the search query (case-insensitive)
+    const searchTerm = q.toLowerCase().trim();
+    const matchingIngredients = allIngredients.filter(ingredient =>
+      ingredient.nama.toLowerCase().includes(searchTerm)
+    );
+
+    res.status(200).json({
+      success: true,
+      query: q,
+      count: matchingIngredients.length,
+      ingredients: matchingIngredients
+    });
+
+  } catch (error) {
+    console.error("Error searching ingredients:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      ingredients: []
+    });
+  }
+}
+
 async function deleteIngredients(req, res) {
   try {
     const { id } = req.params;
@@ -479,4 +522,4 @@ async function addIngredients(req, res) {
     });
   }
 }
-module.exports = { estimateIngredientWithLLM, getNotValidatedIngredients, editIngredientsNutritions, getIngredients, deleteIngredients, addIngredients };
+module.exports = { estimateIngredientWithLLM, getNotValidatedIngredients, editIngredientsNutritions, getIngredients, deleteIngredients, addIngredients, searchIngredients };

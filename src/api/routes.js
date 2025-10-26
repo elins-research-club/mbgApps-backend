@@ -8,7 +8,7 @@ const {
   searchMenus,
 } = require("../controllers/menuController");
 const { suggestMenuStream } = require("../controllers/streamController");
-const { getIngredients, getNotValidatedIngredients, editIngredientsNutritions, deleteIngredients, addIngredients } = require("../controllers/ingredientController")
+const { getIngredients, getNotValidatedIngredients, editIngredientsNutritions, deleteIngredients, addIngredients, searchIngredients } = require("../controllers/ingredientController")
 
 const router = express.Router();
 
@@ -23,5 +23,5 @@ router.post("/ingredients/get-ingredients", getIngredients); // POST bcz we need
 router.get("/ingredients/get-not-validated", getNotValidatedIngredients);
 router.put("/ingredients/:id", editIngredientsNutritions);
 router.delete("/ingredients/:id", deleteIngredients);
-
+router.get("/ingredients/search", searchIngredients);
 module.exports = router;
