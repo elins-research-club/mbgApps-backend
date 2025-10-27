@@ -5,20 +5,36 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ 
+const model = genAI.getGenerativeModel({
   model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
   generationConfig: {
     temperature: 0.1,
     topP: 0.8,
     topK: 20,
-  }
+  },
 });
 
 const NUTRIENTS = [
-  "energi_kkal","protein_g","lemak_g","karbohidrat_g","serat_g","abu_g",
-  "kalsium_mg","fosfor_mg","besi_mg","natrium_mg","kalium_mg","tembaga_mg",
-  "seng_mg","retinol_mcg","b_kar_mcg","karoten_total_mcg","thiamin_mg",
-  "riboflavin_mg","niasin_mg","vitamin_c_mg"
+  "energi_kkal",
+  "protein_g",
+  "lemak_g",
+  "karbohidrat_g",
+  "serat_g",
+  "abu_g",
+  "kalsium_mg",
+  "fosfor_mg",
+  "besi_mg",
+  "natrium_mg",
+  "kalium_mg",
+  "tembaga_mg",
+  "seng_mg",
+  "retinol_mcg",
+  "b_kar_mcg",
+  "karoten_total_mcg",
+  "thiamin_mg",
+  "riboflavin_mg",
+  "niasin_mg",
+  "vitamin_c_mg",
 ];
 
 async function getLLMPrediction(ingredientName, existingMenus) {
@@ -50,7 +66,10 @@ REQUIRED JSON FORMAT:
 }
 
 TKPI_LIST (use exact id and name):
-${existingMenus.slice(0, 500).map(m => `{"id":${m.id},"name":"${m.name}"}`).join("\n")}
+${existingMenus
+  .slice(0, 500)
+  .map((m) => `{"id":${m.id},"name":"${m.name}"}`)
+  .join("\n")}
 
 Return only the JSON object:`;
 
@@ -61,83 +80,123 @@ Return only the JSON object:`;
       const response = await result.response;
       const text = await response.text();
       console.log(`LLM Response (attempt ${attempt + 1}):`, text.substring());
-      
+
       let cleaned = text.replace(/```json|```/g, "").trim();
       const first = cleaned.indexOf("{");
       const last = cleaned.lastIndexOf("}");
-      
+
       if (first === -1 || last === -1) {
         if (attempt < maxRetries) continue;
-        return { ingredient_name: ingredientName, candidates: [], confidence: 0 };
+        return {
+          ingredient_name: ingredientName,
+          candidates: [],
+          confidence: 0,
+        };
       }
-      
+
       cleaned = cleaned.substring(first, last + 1);
       const parsed = JSON.parse(cleaned);
-      
+
       if (!parsed.candidates || !Array.isArray(parsed.candidates)) {
         if (attempt < maxRetries) continue;
-        return { ingredient_name: ingredientName, candidates: [], confidence: 0 };
+        return {
+          ingredient_name: ingredientName,
+          candidates: [],
+          confidence: 0,
+        };
       }
-      
+
       // Validate and sanitize candidates
       const validCandidates = parsed.candidates
-        .filter(c => c && (c.id != null || c.name))
-        .map(c => ({
-          id: typeof c.id === 'number' ? c.id : null,
-          name: String(c.name || ''),
-          score: typeof c.score === 'number' && c.score >= 0 && c.score <= 1 ? c.score : 0.5
+        .filter((c) => c && (c.id != null || c.name))
+        .map((c) => ({
+          id: typeof c.id === "number" ? c.id : null,
+          name: String(c.name || ""),
+          score:
+            typeof c.score === "number" && c.score >= 0 && c.score <= 1
+              ? c.score
+              : 0.5,
         }))
         .slice(0, 10);
-      
-      const confidence = typeof parsed.confidence === 'number' && parsed.confidence >= 0 && parsed.confidence <= 1 
-        ? parsed.confidence 
-        : 0.5;
-      
+
+      const confidence =
+        typeof parsed.confidence === "number" &&
+        parsed.confidence >= 0 &&
+        parsed.confidence <= 1
+          ? parsed.confidence
+          : 0.5;
+
       return {
         ingredient_name: ingredientName,
         english_equivalent: parsed.english_equivalent || "",
         candidates: validCandidates,
-        confidence
+        confidence,
       };
-      
     } catch (err) {
       console.error(`LLM parse error (attempt ${attempt + 1}):`, err.message);
       if (attempt >= maxRetries) {
-        return { ingredient_name: ingredientName, candidates: [], confidence: 0 };
+        return {
+          ingredient_name: ingredientName,
+          candidates: [],
+          confidence: 0,
+        };
       }
     }
   }
-  
+
   return { ingredient_name: ingredientName, candidates: [], confidence: 0 };
 }
 
 async function estimateIngredientWithLLM(ingredientName) {
   try {
-    const allNames = await prisma.bahan.findMany({ select: { id: true, nama: true } });
-    const existingMenus = allNames.map(b => ({ id: b.id, name: b.nama }));
+    const allNames = await prisma.bahan.findMany({
+      select: { id: true, nama: true },
+    });
+    const existingMenus = allNames.map((b) => ({ id: b.id, name: b.nama }));
     const llm = await getLLMPrediction(ingredientName, existingMenus);
 
-    const candidatePromises = (llm.candidates || []).map(async c => {
-      if (c.id != null) return await prisma.bahan.findUnique({ where: { id: c.id } });
-      if (c.name) return await prisma.bahan.findFirst({ where: { nama: { equals: c.name } } });
+    const candidatePromises = (llm.candidates || []).map(async (c) => {
+      if (c.id != null)
+        return await prisma.bahan.findUnique({ where: { id: c.id } });
+      if (c.name)
+        return await prisma.bahan.findFirst({
+          where: { nama: { equals: c.name } },
+        });
       return null;
     });
-    const candidateRows = (await Promise.all(candidatePromises)).filter(Boolean);
+    const candidateRows = (await Promise.all(candidatePromises)).filter(
+      Boolean
+    );
 
     if (candidateRows.length > 0) {
       const mapped = [];
-      for (const c of (llm.candidates || [])) {
-        const row = c.id != null ? candidateRows.find(r => r.id === c.id) : candidateRows.find(r => String(r.nama).toLowerCase() === String(c.name || '').toLowerCase());
-        if (row) mapped.push({ row, score: typeof c.score === 'number' ? c.score : null });
+      for (const c of llm.candidates || []) {
+        const row =
+          c.id != null
+            ? candidateRows.find((r) => r.id === c.id)
+            : candidateRows.find(
+                (r) =>
+                  String(r.nama).toLowerCase() ===
+                  String(c.name || "").toLowerCase()
+              );
+        if (row)
+          mapped.push({
+            row,
+            score: typeof c.score === "number" ? c.score : null,
+          });
       }
 
-      const weightsRaw = mapped.map(m => (m.score != null ? m.score : 1));
-      const sumW = weightsRaw.reduce((a,b) => a+b, 0) || 1;
-      const weights = weightsRaw.map(w => w / sumW);
+      const weightsRaw = mapped.map((m) => (m.score != null ? m.score : 1));
+      const sumW = weightsRaw.reduce((a, b) => a + b, 0) || 1;
+      const weights = weightsRaw.map((w) => w / sumW);
 
       const estimated = {};
-      NUTRIENTS.forEach(n => {
-        estimated[n] = mapped.reduce((acc, m, j) => acc + ((m.row[n] != null ? Number(m.row[n]) : 0) * weights[j]), 0);
+      NUTRIENTS.forEach((n) => {
+        estimated[n] = mapped.reduce(
+          (acc, m, j) =>
+            acc + (m.row[n] != null ? Number(m.row[n]) : 0) * weights[j],
+          0
+        );
         estimated[n] = Number((estimated[n] || 0).toFixed(4));
       });
 
@@ -146,23 +205,35 @@ async function estimateIngredientWithLLM(ingredientName) {
           data: {
             nama: ingredientName,
             isValidated: false,
-            ...estimated
-          }
+            ...estimated,
+          },
         });
-        console.log(`✅ Saved LLM-predicted ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`);
+        console.log(
+          `✅ Saved LLM-predicted ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`
+        );
       } catch (saveError) {
-        console.error(`❌ Failed to save ingredient "${ingredientName}" to database:`, saveError.message);
+        console.error(
+          `❌ Failed to save ingredient "${ingredientName}" to database:`,
+          saveError.message
+        );
       }
 
       return {
         name: ingredientName,
-        method: 'llm-candidates',
+        method: "llm-candidates",
         english_equivalent: llm.english_equivalent || null,
-        candidates: mapped.map((m, i) => ({ id: m.row.id, name: m.row.nama, weight: weights[i] })),
+        candidates: mapped.map((m, i) => ({
+          id: m.row.id,
+          name: m.row.nama,
+          weight: weights[i],
+        })),
         predicted_composition: estimated,
         provenance: {
           llm_candidates: llm.candidates || [],
-          tkpi_candidates: mapped.map(m => ({ id: m.row.id, name: m.row.nama })),
+          tkpi_candidates: mapped.map((m) => ({
+            id: m.row.id,
+            name: m.row.nama,
+          })),
         },
         confidence: llm.confidence,
       };
@@ -172,11 +243,11 @@ async function estimateIngredientWithLLM(ingredientName) {
   }
   return {
     name: ingredientName,
-    method: 'none',
+    method: "none",
     candidates: [],
     predicted_composition: null,
     provenance: {},
-    confidence: 0
+    confidence: 0,
   };
 }
 
@@ -184,7 +255,7 @@ async function getNotValidatedIngredients(req, res) {
   try {
     const notValidatedIngredients = await prisma.bahan.findMany({
       where: {
-        isValidated: false
+        isValidated: false,
       },
       select: {
         id: true,
@@ -209,21 +280,21 @@ async function getNotValidatedIngredients(req, res) {
         riboflavin_mg: true,
         niasin_mg: true,
         vitamin_c_mg: true,
-        isValidated: true
-      }
+        isValidated: true,
+      },
     });
 
     res.status(200).json({
       success: true,
       count: notValidatedIngredients.length,
-      ingredients: notValidatedIngredients
+      ingredients: notValidatedIngredients,
     });
   } catch (error) {
     console.error("Error fetching not validated ingredients:", error);
     res.status(500).json({
       success: false,
       error: error.message,
-      ingredients: []
+      ingredients: [],
     });
   }
 }
@@ -231,13 +302,16 @@ async function getNotValidatedIngredients(req, res) {
 async function editIngredientsNutritions(req, res) {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const { ingredientData } = req.body;
+
+    // Definisikan 'updates' sebagai objek nutrisi itu sendiri
+    const updates = ingredientData;
 
     // Validate that ID is provided
     if (!id) {
       return res.status(400).json({
         success: false,
-        error: "Ingredient ID is required"
+        error: "Ingredient ID is required",
       });
     }
 
@@ -246,23 +320,29 @@ async function editIngredientsNutritions(req, res) {
     delete updates.isValidated;
 
     // Validate that at least one nutrient field is being updated
-    const nutrientFields = NUTRIENTS.filter(nutrient => updates.hasOwnProperty(nutrient));
+    const nutrientFields = NUTRIENTS.filter((nutrient) =>
+      updates.hasOwnProperty(nutrient)
+    );
 
     // We use < 0 in case the nutritions are already correct
     if (nutrientFields.length < 0) {
       return res.status(400).json({
         success: false,
-        error: "At least one nutrient field must be provided for update"
+        error: "At least one nutrient field must be provided for update",
       });
     }
 
     // Validate nutrient values are numbers
     for (const nutrient of nutrientFields) {
       const value = updates[nutrient];
-      if (value !== null && value !== undefined && (isNaN(value) || value < 0)) {
+      if (
+        value !== null &&
+        value !== undefined &&
+        (isNaN(value) || value < 0)
+      ) {
         return res.status(400).json({
           success: false,
-          error: `Invalid value for ${nutrient}: must be a non-negative number or null`
+          error: `Invalid value for ${nutrient}: must be a non-negative number or null`,
         });
       }
     }
@@ -270,11 +350,11 @@ async function editIngredientsNutritions(req, res) {
     // Update the ingredient with new nutrition values and set isValidated to true
     const updatedIngredient = await prisma.bahan.update({
       where: {
-        id: parseInt(id)
+        id: parseInt(id),
       },
       data: {
         ...updates,
-        isValidated: true
+        isValidated: true,
       },
       select: {
         id: true,
@@ -299,31 +379,32 @@ async function editIngredientsNutritions(req, res) {
         riboflavin_mg: true,
         niasin_mg: true,
         vitamin_c_mg: true,
-        isValidated: true
-      }
+        isValidated: true,
+      },
     });
 
-    console.log(`Updated and validated ingredient "${updatedIngredient.nama}" (ID: ${updatedIngredient.id})`);
+    console.log(
+      `Updated and validated ingredient "${updatedIngredient.nama}" (ID: ${updatedIngredient.id})`
+    );
 
     res.status(200).json({
       success: true,
       message: "Ingredient nutrition values updated and validated successfully",
-      ingredient: updatedIngredient
+      ingredient: updatedIngredient,
     });
-
   } catch (error) {
     console.error("Error updating ingredient nutrition:", error);
 
-    if (error.code === 'P2025') {
+    if (error.code === "P2025") {
       return res.status(404).json({
         success: false,
-        error: "Ingredient not found"
+        error: "Ingredient not found",
       });
     }
 
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 }
@@ -332,56 +413,56 @@ async function getIngredients(req, res) {
   try {
     const name = (req && req.body && req.body.name) || req.query.name;
     if (!name) {
-      return res.status(400).json({ error: 'Missing `name` in body or query' });
+      return res.status(400).json({ error: "Missing `name` in body or query" });
     }
     const result = await estimateIngredientWithLLM(name);
     return res.json(result);
   } catch (err) {
-    console.error('Error in getIngredients:', err);
+    console.error("Error in getIngredients:", err);
     return res.status(500).json({ error: String(err) });
   }
 }
 
 async function searchIngredients(req, res) {
-  try {
-    const { q } = req.query;
+  const { q, exact } = req.query;
 
-    // Validate query parameter
-    if (!q || typeof q !== 'string' || q.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: "Search query 'q' is required and must be a non-empty string"
+  if (!q) {
+    return res
+      .status(400)
+      .json({ message: "Query parameter 'q' is required." });
+  }
+
+  try {
+    let ingredients;
+    if (exact === "true") {
+      // --- PERUBAHAN DI SINI ---
+      // 'mode: "insensitive"' telah dihapus
+      ingredients = await prisma.bahan.findMany({
+        where: {
+          nama: {
+            equals: q,
+            // mode: "insensitive", // <-- DIHAPUS
+          },
+        },
+      });
+    } else {
+      // --- PERUBAHAN DI SINI ---
+      // 'mode: "insensitive"' telah dihapus
+      ingredients = await prisma.bahan.findMany({
+        where: {
+          nama: {
+            contains: q,
+            // mode: "insensitive", // <-- DIHAPUS
+          },
+        },
+        take: 10,
       });
     }
 
-    // Get all ingredients from database
-    const allIngredients = await prisma.bahan.findMany({
-      select: {
-        id: true,
-        nama: true,
-      }
-    });
-
-    // Filter ingredients that contain the search query (case-insensitive)
-    const searchTerm = q.toLowerCase().trim();
-    const matchingIngredients = allIngredients.filter(ingredient =>
-      ingredient.nama.toLowerCase().includes(searchTerm)
-    );
-
-    res.status(200).json({
-      success: true,
-      query: q,
-      count: matchingIngredients.length,
-      ingredients: matchingIngredients
-    });
-
+    res.status(200).json({ ingredients });
   } catch (error) {
     console.error("Error searching ingredients:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      ingredients: []
-    });
+    res.status(500).json({ message: "Internal server error" });
   }
 }
 
@@ -393,43 +474,44 @@ async function deleteIngredients(req, res) {
     if (!id) {
       return res.status(400).json({
         success: false,
-        error: "Ingredient ID is required"
+        error: "Ingredient ID is required",
       });
     }
 
     // Delete the ingredient
     const deletedIngredient = await prisma.bahan.delete({
       where: {
-        id: parseInt(id)
+        id: parseInt(id),
       },
       select: {
         id: true,
         nama: true,
-        isValidated: true
-      }
+        isValidated: true,
+      },
     });
 
-    console.log(`Deleted ingredient "${deletedIngredient.nama}" (ID: ${deletedIngredient.id})`);
+    console.log(
+      `Deleted ingredient "${deletedIngredient.nama}" (ID: ${deletedIngredient.id})`
+    );
 
     res.status(200).json({
       success: true,
       message: "Ingredient deleted successfully",
-      ingredient: deletedIngredient
+      ingredient: deletedIngredient,
     });
-
   } catch (error) {
     console.error("Error deleting ingredient:", error);
 
-    if (error.code === 'P2025') {
+    if (error.code === "P2025") {
       return res.status(404).json({
         success: false,
-        error: "Ingredient not found"
+        error: "Ingredient not found",
       });
     }
 
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 }
@@ -439,10 +521,14 @@ async function addIngredients(req, res) {
     const ingredientData = req.body;
 
     // Validate required fields
-    if (!ingredientData.nama || typeof ingredientData.nama !== 'string' || ingredientData.nama.trim() === '') {
+    if (
+      !ingredientData.nama ||
+      typeof ingredientData.nama !== "string" ||
+      ingredientData.nama.trim() === ""
+    ) {
       return res.status(400).json({
         success: false,
-        error: "Ingredient name is required and must be a non-empty string"
+        error: "Ingredient name is required and must be a non-empty string",
       });
     }
 
@@ -451,13 +537,19 @@ async function addIngredients(req, res) {
     delete ingredientData.isValidated;
 
     // Validate nutrient values if provided
-    const nutrientFields = NUTRIENTS.filter(nutrient => ingredientData.hasOwnProperty(nutrient));
+    const nutrientFields = NUTRIENTS.filter((nutrient) =>
+      ingredientData.hasOwnProperty(nutrient)
+    );
     for (const nutrient of nutrientFields) {
       const value = ingredientData[nutrient];
-      if (value !== null && value !== undefined && (isNaN(value) || value < 0)) {
+      if (
+        value !== null &&
+        value !== undefined &&
+        (isNaN(value) || value < 0)
+      ) {
         return res.status(400).json({
           success: false,
-          error: `Invalid value for ${nutrient}: must be a non-negative number or null`
+          error: `Invalid value for ${nutrient}: must be a non-negative number or null`,
         });
       }
 
@@ -469,7 +561,7 @@ async function addIngredients(req, res) {
     const newIngredient = await prisma.bahan.create({
       data: {
         ...ingredientData,
-        isValidated: true
+        isValidated: true,
       },
       select: {
         id: true,
@@ -494,32 +586,41 @@ async function addIngredients(req, res) {
         riboflavin_mg: true,
         niasin_mg: true,
         vitamin_c_mg: true,
-        isValidated: true
-      }
+        isValidated: true,
+      },
     });
 
-    console.log(`Manually added ingredient "${newIngredient.nama}" (ID: ${newIngredient.id})`);
+    console.log(
+      `Manually added ingredient "${newIngredient.nama}" (ID: ${newIngredient.id})`
+    );
 
     res.status(201).json({
       success: true,
       message: "Ingredient added successfully",
-      ingredient: newIngredient
+      ingredient: newIngredient,
     });
-
   } catch (error) {
     console.error("Error adding ingredient:", error);
 
-    if (error.code === 'P2002') {
+    if (error.code === "P2002") {
       return res.status(409).json({
         success: false,
-        error: "An ingredient with this name already exists"
+        error: "An ingredient with this name already exists",
       });
     }
 
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 }
-module.exports = { estimateIngredientWithLLM, getNotValidatedIngredients, editIngredientsNutritions, getIngredients, deleteIngredients, addIngredients, searchIngredients };
+module.exports = {
+  estimateIngredientWithLLM,
+  getNotValidatedIngredients,
+  editIngredientsNutritions,
+  getIngredients,
+  deleteIngredients,
+  addIngredients,
+  searchIngredients,
+};
