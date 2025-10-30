@@ -243,7 +243,7 @@ const generateNutrition = async (req, res) => {
 			1,
 			target,
 		);
-
+		console.log(nutrisiPerResep);
 		const response = {
 			// Objek Label Gizi Total
 			totalLabel: {
@@ -280,7 +280,7 @@ const generateNutrition = async (req, res) => {
 		console.log(`\n KALKULASI SELESAI`);
 		return res.status(200).json({
 			...response,
-			...response.rekomendasi, // ⬅ tambahkan baris ini
+			// ...response.rekomendasi, // ⬅ tambahkan baris ini
 		});
 	} catch (error) {
 		console.error("Error saat generate nutrisi:", error);
