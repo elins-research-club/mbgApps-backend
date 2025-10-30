@@ -9,8 +9,48 @@ const {
 } = require("../services/aiService");
 const { getRecommendation } = require("./recommendationSystemController");
 
+// ✅ PERBAIKAN: Gunakan konstanta yang konsisten
+const KOMPOSISI_CHEF_KATEGORI = "komposisi_chef";
+
 // =================================================================
-// HELPER: Fungsi pencarian bahan
+// HELPER BARU: Mengambil dan Memformat Preview Komposisi
+// =================================================================
+async function getCompositionPreview(menuId) {
+  const components = await prisma.menuKomposisi.findMany({
+    where: { menu_induk_id: menuId },
+    select: {
+      tipe_komponen: true,
+      menu_anak: {
+        select: { nama: true },
+      },
+    },
+    orderBy: { tipe_komponen: "asc" }, // Urutkan untuk konsistensi
+  });
+
+  if (components.length === 0) {
+    return null;
+  }
+
+  // Format menjadi string preview: "Karbo: Nasi, Lauk: Ayam, Sayur: Bayam, ..."
+  const previewString = components
+    .map((c) => {
+      let label = c.tipe_komponen;
+      // Singkatan untuk tampilan lebih ringkas
+      if (c.tipe_komponen === "proteinHewani") label = "Lauk";
+      else if (c.tipe_komponen === "proteinTambahan") label = "Side";
+      else if (c.tipe_komponen === "karbohidrat") label = "Karbo";
+      else if (c.tipe_komponen === "sayur") label = "Sayur";
+      else if (c.tipe_komponen === "buah") label = "Buah";
+
+      return `${label}: ${c.menu_anak.nama}`;
+    })
+    .join(", ");
+
+  return previewString;
+}
+
+// =================================================================
+// HELPER: Fungsi pencarian bahan (TIDAK BERUBAH)
 // =================================================================
 function calculateSimilarity(str1, str2) {
   const words1 = str1.toLowerCase().split(/\s+/);
@@ -49,38 +89,323 @@ async function findBestMatchingBahan(searchName) {
 }
 
 // =================================================================
-// FUNGSI UNTUK SEARCH BOX
+// BARU: Fungsi Rekursif Perhitungan Gizi Menu
+// =================================================================
+async function getMenuNutritionById(menuId, target = 1) {
+  const menu = await prisma.menu.findUnique({
+    where: { id: menuId },
+  });
+
+  if (!menu) {
+    throw new Error("Menu tidak ditemukan.");
+  }
+
+  if (menu.kategori === KOMPOSISI_CHEF_KATEGORI) {
+    const components = await prisma.menuKomposisi.findMany({
+      where: { menu_induk_id: menuId },
+      include: {
+        menu_anak: { select: { id: true, nama: true, kategori: true } },
+      },
+      orderBy: { tipe_komponen: "asc" },
+    });
+
+    if (components.length === 0) {
+      return {
+        totalLabel: null,
+        detailPerhitungan: null,
+        detailPerResep: null,
+        rekomendasi: { saran: [], kekurangan: [] }, // aman
+      };
+    }
+
+    let combinedNutrition = {};
+    let combinedDetails = [];
+    let detailPerResep = [];
+
+    for (const component of components) {
+      const componentResult = await getMenuNutritionById(
+        component.menu_anak_id
+      );
+
+      if (componentResult?.totalLabel) {
+        const categoryLabels = {
+          karbohidrat: "Karbohidrat",
+          proteinHewani: "Protein Hewani",
+          sayur: "Sayur",
+          proteinTambahan: "Protein Tambahan",
+          buah: "Buah",
+        };
+
+        detailPerResep.push({
+          kategori: component.tipe_komponen,
+          kategori_label:
+            categoryLabels[component.tipe_komponen] || component.tipe_komponen,
+          nama_menu: component.menu_anak.nama,
+          menu_id: component.menu_anak.id,
+          nutrisi: componentResult.totalLabel.informasi_nilai_gizi,
+          gramasi: componentResult.totalLabel.takaran_saji_g,
+          rincian_bahan:
+            componentResult.detailPerhitungan?.rincian_per_bahan || [],
+        });
+      }
+
+      if (componentResult?.totalLabel?.informasi_nilai_gizi) {
+        for (const key in componentResult.totalLabel.informasi_nilai_gizi) {
+          const val = componentResult.totalLabel.informasi_nilai_gizi[key];
+          combinedNutrition[key] = (combinedNutrition[key] || 0) + val;
+        }
+      }
+
+      if (componentResult?.detailPerhitungan?.rincian_per_bahan) {
+        combinedDetails.push(
+          ...componentResult.detailPerhitungan.rincian_per_bahan
+        );
+      }
+    }
+
+    // ✅ Tambahkan pemanggilan getRecommendation() di sini
+    const rekomendasi = getRecommendation(
+      detailPerResep.reduce((acc, r) => {
+        acc[r.nama_menu] = r.nutrisi;
+        return acc;
+      }, {}),
+      combinedNutrition,
+      1,
+      1 // classGrade default (bisa diganti sesuai target kalau ada)
+    );
+
+    return {
+      totalLabel: {
+        takaran_saji_g: combinedDetails.reduce(
+          (sum, b) => sum + (b.gramasi || 0),
+          0
+        ),
+        informasi_nilai_gizi: combinedNutrition,
+      },
+      detailPerhitungan: {
+        rincian_per_bahan: combinedDetails,
+        log: ["Menu Komposisi dihitung dari komponennya."],
+      },
+      detailPerResep,
+      rekomendasi, // ✅ hasil rekomendasi
+    };
+  } else {
+    // --- LOGIKA MENU BIASA ---
+    const resepList = await prisma.resep.findMany({
+      where: { menu_id: menuId },
+      include: { bahan: true },
+    });
+
+    if (resepList.length === 0) {
+      return {
+        totalLabel: { informasi_nilai_gizi: {} },
+        detailPerhitungan: { rincian_per_bahan: [] },
+        rekomendasi: { saran: [], kekurangan: [] }, // aman
+      };
+    }
+
+    let totalGizi = {};
+    let detailBahan = [];
+
+    resepList.forEach((resep) => {
+      const ratio = resep.gramasi / 100;
+      for (const key in resep.bahan) {
+        if (typeof resep.bahan[key] === "number") {
+          totalGizi[key] = (totalGizi[key] || 0) + resep.bahan[key] * ratio;
+        }
+      }
+      detailBahan.push({
+        nama: resep.bahan.nama,
+        gramasi: resep.gramasi,
+        gizi: resep.bahan,
+      });
+    });
+
+    // ✅ Tambahkan rekomendasi juga di menu biasa
+    const rekomendasi = getRecommendation(
+      { [menu.nama]: totalGizi },
+      totalGizi,
+      1,
+      1
+    );
+
+    return {
+      totalLabel: {
+        takaran_saji_g: resepList.reduce((sum, r) => sum + r.gramasi, 0),
+        informasi_nilai_gizi: totalGizi,
+      },
+      detailPerhitungan: {
+        rincian_per_bahan: detailBahan,
+        log: ["Menu biasa dihitung dari resep dan bahan."],
+      },
+      rekomendasi, // ✅ hasil rekomendasi
+    };
+  }
+}
+
+// =================================================================
+// FUNGSI UNTUK SEARCH BOX (REVISI: MEMANGGIL HELPER BARU, ROBUST)
 // =================================================================
 const searchMenus = async (req, res) => {
-  const query = req.query.q || "";
-  if (query.length < 2) {
-    return res.json([]);
-  }
   try {
-    const menus = await prisma.menu.findMany({
-      where: { nama: { contains: query.toLowerCase() } },
-      select: { id: true, nama: true },
-      take: 5,
-    });
-    res.status(200).json(menus);
+    const query = (req.query.q || "").toLowerCase().trim();
+    const type = (req.query.type || "component").toLowerCase().trim();
+
+    if (query.length < 2) {
+      return res.json([]);
+    }
+
+    let menus;
+
+    // ===============================
+    // 🔹 CASE 1 — TYPE: composition
+    // ===============================
+    if (type === "composition") {
+      // ✅ PERBAIKAN: Gunakan konstanta yang konsisten
+      const rawMenus = await prisma.menu.findMany({
+        where: {
+          nama: {
+            contains: query,
+          },
+          kategori: {
+            equals: KOMPOSISI_CHEF_KATEGORI,
+          },
+        },
+        select: {
+          id: true,
+          nama: true,
+          kategori: true,
+        },
+        take: 20,
+      });
+
+      // ✅ BARU: Tambahkan preview komposisi untuk setiap menu
+      menus = await Promise.all(
+        rawMenus.map(async (menu) => {
+          // Ambil komponen menu dari tabel MenuKomposisi
+          const components = await prisma.menuKomposisi.findMany({
+            where: { menu_induk_id: menu.id },
+            include: {
+              menu_anak: {
+                select: { nama: true },
+              },
+            },
+            orderBy: { tipe_komponen: "asc" },
+          });
+
+          // Format preview komposisi
+          let previewText = "";
+          if (components.length > 0) {
+            const componentLabels = {
+              karbohidrat: "Karbo",
+              proteinHewani: "Lauk",
+              sayur: "Sayur",
+              proteinTambahan: "Protein+",
+              buah: "Buah",
+            };
+
+            const previewParts = components.map((comp) => {
+              const label =
+                componentLabels[comp.tipe_komponen] || comp.tipe_komponen;
+              return `${label}: ${comp.menu_anak.nama}`;
+            });
+
+            previewText = previewParts.join(" • ");
+          }
+
+          return {
+            ...menu,
+            preview_komposisi: previewText || null,
+          };
+        })
+      );
+    }
+
+    // ===============================
+    // 🔹 CASE 2 — TYPE: component
+    // ===============================
+    else if (type === "component") {
+      // ✅ PERBAIKAN: Untuk resep dasar, ambil semua kecuali komposisi_chef
+      menus = await prisma.menu.findMany({
+        where: {
+          nama: {
+            contains: query,
+          },
+          NOT: {
+            kategori: {
+              equals: KOMPOSISI_CHEF_KATEGORI,
+            },
+          },
+        },
+        select: {
+          id: true,
+          nama: true,
+          kategori: true,
+        },
+        take: 20,
+      });
+    }
+
+    // ===============================
+    // 🔹 CASE 3 — DEFAULT / fallback
+    // ===============================
+    else {
+      menus = await prisma.menu.findMany({
+        where: {
+          nama: {
+            contains: query,
+          },
+        },
+        select: {
+          id: true,
+          nama: true,
+          kategori: true,
+        },
+        take: 20,
+      });
+    }
+
+    console.log(`🔍 [searchMenus] Type: ${type}, Hasil: ${menus.length}`);
+    return res.json(menus);
   } catch (error) {
-    res.status(500).json({ message: "Gagal mencari menu" });
+    console.error("❌ Error di searchMenus:", error);
+    console.error(error.stack);
+    return res
+      .status(500)
+      .json({ message: "Terjadi kesalahan saat pencarian menu." });
   }
 };
+
 // =================================================================
 // FUNGSI getMenus LAMA
 // =================================================================
 const getMenus = async (req, res) => {
   try {
-    const allMenus = await prisma.menu.findMany({ orderBy: { nama: "asc" } });
-    const groupedMenus = allMenus.reduce(
-      (acc, menu) => {
-        if (acc[menu.kategori])
-          acc[menu.kategori].push({ id: menu.id, nama: menu.nama });
-        return acc;
+    // ✅ PERBAIKAN: Filter menu komposisi
+    const allMenus = await prisma.menu.findMany({
+      where: {
+        NOT: {
+          kategori: KOMPOSISI_CHEF_KATEGORI,
+        },
       },
-      { karbo: [], lauk: [], sayur: [], side_dish: [], buah: [] }
-    );
+      orderBy: { nama: "asc" },
+    });
+
+    const groupedMenus = {
+      karbohidrat: [],
+      proteinHewani: [],
+      sayur: [],
+      proteinTambahan: [],
+      buah: [],
+    };
+
+    allMenus.forEach((menu) => {
+      // ✅ Gunakan kategori langsung dari database
+      if (groupedMenus[menu.kategori]) {
+        groupedMenus[menu.kategori].push({ id: menu.id, nama: menu.nama });
+      }
+    });
+
     return res.status(200).json(groupedMenus);
   } catch (error) {
     console.error("Error saat mengambil menu:", error);
@@ -91,27 +416,23 @@ const getMenus = async (req, res) => {
 // =================================================================
 // BAGIAN 2: generateNutrition
 // =================================================================
+const TARGET_NUTRITION_REQUIREMENTS = {
+  1: { Energi: 1500, Protein: 45, Lemak: 50, Karbohidrat: 220 },
+  2: { Energi: 1600, Protein: 50, Lemak: 55, Karbohidrat: 240 },
+};
+
 const generateNutrition = async (req, res) => {
   try {
-    // --- PERBAIKAN: Terima banyak ID dari payload frontend ---
     const { karbo_id, lauk_id, sayur_id, side_dish_id, buah_id, target } =
       req.body;
-    // Kumpulkan semua ID yang valid (bukan null) ke dalam satu array
+
     const selectedIds = [karbo_id, lauk_id, sayur_id, side_dish_id, buah_id]
-      .filter((id) => id !== null && id !== undefined) // 1. Hapus nilai null/undefined
-      .map((id) => parseInt(id)); // 2. Ubah sisanya menjadi angka
+      .filter((id) => id !== null && id !== undefined)
+      .map((id) => parseInt(id));
 
-    // --- AKHIR PERBAIKAN ---
-
-    console.log(`\n--- MEMULAI KALKULASI GIZI ---`);
-    console.log(`[DETEKTOR 1] Menerima ID Menu:`, selectedIds);
-
-    // Validasi ini sekarang akan berfungsi dengan benar
     if (selectedIds.length === 0)
       return res.status(400).json({ message: "Tidak ada menu yang dipilih." });
 
-    // Sisa kode Anda di bawah ini sudah sempurna dan tidak perlu diubah
-    // karena sudah bekerja dengan array 'selectedIds'
     const selectedMenus = await prisma.menu.findMany({
       where: { id: { in: selectedIds } },
       select: { id: true, nama: true, kategori: true },
@@ -125,42 +446,9 @@ const generateNutrition = async (req, res) => {
       },
     });
 
-    console.log(
-      `[DETEKTOR 2] Menemukan ${recipes.length} bahan resep di database.`
-    );
-
-    const menuAnalysis = [];
-    for (const menu of selectedMenus) {
-      const menuRecipes = recipes.filter((r) => r.menu_id === menu.id);
-      const availableIngredients = menuRecipes.map((r) => ({
-        nama: r.bahan.nama,
-        gramasi: r.gramasi,
-      }));
-
-      menuAnalysis.push({
-        menu_nama: menu.nama,
-        kategori: menu.kategori,
-        jumlah_bahan_tersedia: menuRecipes.length,
-        bahan_tersedia: availableIngredients,
-      });
-
-      console.log(`\n[TRANSPARANSI] Menu: "${menu.nama}" (${menu.kategori})`);
-      console.log(`  └─ Bahan tersedia di DB: ${menuRecipes.length} item`);
-      if (menuRecipes.length === 0) {
-        console.log(`      PERINGATAN: Menu ini tidak memiliki resep!`);
-      } else {
-        availableIngredients.forEach((b, idx) => {
-          console.log(`     ${idx + 1}. ${b.nama} (${b.gramasi}g)`);
-        });
-      }
-    }
-
     if (recipes.length === 0) {
-      console.error("\n KESALAHAN KRITIS: Tidak ada resep yang ditemukan!");
       return res.status(404).json({
         message: "Tidak ada resep yang ditemukan untuk menu yang dipilih.",
-        detail: "Pastikan menu sudah memiliki resep di database.",
-        menu_dipilih: selectedMenus.map((m) => m.nama),
       });
     }
 
@@ -187,41 +475,37 @@ const generateNutrition = async (req, res) => {
       vitamin_c_mg: 0,
     };
     let totalGramasi = 0;
-    const detailBahan = []; // Ini untuk Revisi 5 Anda
+    const detailBahan = [];
     const nutrisiPerResep = {};
+
     recipes.forEach((resep) => {
-      console.log(resep);
       const { gramasi, bahan } = resep;
       if (!bahan) return;
+
       totalGramasi += gramasi;
       const ratio = gramasi / 100;
-      const giziBahanIni = {}; // Objek untuk menyimpan gizi per bahan
+      const giziBahanIni = {};
+
       for (const key in totalGizi) {
         if (bahan[key] !== null && bahan[key] !== undefined) {
           const nilaiGiziBahan = (bahan[key] || 0) * ratio;
           totalGizi[key] += nilaiGiziBahan;
-          giziBahanIni[key] = parseFloat(nilaiGiziBahan.toFixed(2)); // Simpan gizi bahan
+          giziBahanIni[key] = parseFloat(nilaiGiziBahan.toFixed(2));
+
           if (!nutrisiPerResep[resep.menu.nama]) {
-            nutrisiPerResep[resep.menu.nama] = {}; // kalo belom ada harus di initialize dulu ternyata, maapkan skill issu javascriptku
+            nutrisiPerResep[resep.menu.nama] = {};
           }
-          if (!nutrisiPerResep[resep.menu.nama][key]) {
-            nutrisiPerResep[resep.menu.nama][key] = 0; // ini juga harus di initialize dulu
-          }
-          nutrisiPerResep[resep.menu.nama][key] += nilaiGiziBahan;
+          nutrisiPerResep[resep.menu.nama][key] =
+            (nutrisiPerResep[resep.menu.nama][key] || 0) + nilaiGiziBahan;
         }
       }
 
-      // Simpan rincian gizi untuk bahan ini
       detailBahan.push({
         nama: bahan.nama,
         gramasi: gramasi,
         gizi: giziBahanIni,
       });
     });
-    console.log(`\n[DETEKTOR 3] Total gramasi: ${totalGramasi}g`);
-    console.log(
-      `[DETEKTOR 3.1] Total energi: ${totalGizi.energi_kkal.toFixed(2)} kkal`
-    );
 
     for (const key in totalGizi)
       totalGizi[key] = parseFloat(totalGizi[key].toFixed(2));
@@ -233,7 +517,7 @@ const generateNutrition = async (req, res) => {
       return `${Math.round(percentage)}%`;
     };
 
-    // minta rekomendasi pakai linear programming
+    // ✅ Ini bagian penting — sesuai versi kamu yang berfungsi
     const rekomendasi = getRecommendation(
       nutrisiPerResep,
       totalGizi,
@@ -242,7 +526,6 @@ const generateNutrition = async (req, res) => {
     );
 
     const response = {
-      // Objek Label Gizi Total
       totalLabel: {
         takaran_saji_g: parseFloat(totalGramasi.toFixed(2)),
         informasi_nilai_gizi: {
@@ -261,24 +544,14 @@ const generateNutrition = async (req, res) => {
           vitamin_c: calculateAkg(totalGizi.vitamin_c_mg, 90),
         },
       },
-      // Objek Rincian (Sesuai Revisi 5)
       detailPerhitungan: {
-        log: [
-          `Total ${selectedMenus.length} menu dihitung.`,
-          `Total ${recipes.length} bahan resep ditemukan.`,
-          `Total gramasi akhir: ${totalGramasi.toFixed(0)}g`,
-        ],
-        rincian_per_bahan: detailBahan, // Ini data rincian bahan
-        rincian_per_menu: menuAnalysis, // Ini data transparansi Anda
+        rincian_per_bahan: detailBahan,
+        rincian_per_menu: selectedMenus,
       },
-      // rekomendasi tambahan gizi
-      rekomendasi: { ...rekomendasi },
+      rekomendasi,
     };
-    console.log(`\n KALKULASI SELESAI`);
-    return res.status(200).json({
-      ...response,
-      ...response.rekomendasi, // ⬅️ tambahkan baris ini
-    });
+
+    return res.status(200).json(response);
   } catch (error) {
     console.error("Error saat generate nutrisi:", error);
     return res.status(500).json({ message: "Server error" });
@@ -286,7 +559,7 @@ const generateNutrition = async (req, res) => {
 };
 
 // =================================================================
-// BAGIAN 3: suggestMenu
+// BAGIAN 3: suggestMenu (TIDAK BERUBAH - Terlalu panjang)
 // =================================================================
 const suggestMenu = async (req, res) => {
   const { new_menu_name } = req.body;
@@ -297,18 +570,17 @@ const suggestMenu = async (req, res) => {
   }
 
   try {
-    console.log(`\n Meminta saran AI untuk: "${new_menu_name}"...`);
+    console.log(`\n🔍 Meminta saran AI untuk: "${new_menu_name}"...`);
     const allMenus = await prisma.menu.findMany({ select: { nama: true } });
     const existingMenuNames = allMenus.map((menu) => menu.nama);
     const allBahanInDb = await prisma.bahan.findMany({
       select: { id: true, nama: true },
     });
     const bahanNameList = allBahanInDb.map((b) => b.nama);
-    console.log(` Database memiliki ${bahanNameList.length} bahan tersedia`);
+    console.log(`📦 Database memiliki ${bahanNameList.length} bahan tersedia`);
 
-    // Panggil AI (seperti sebelumnya)
     const suggestion = await getAiSuggestion(new_menu_name, existingMenuNames);
-    console.log(" Hasil AI suggestion:", JSON.stringify(suggestion, null, 2));
+    console.log("🤖 Hasil AI suggestion:", JSON.stringify(suggestion, null, 2));
 
     if (
       !suggestion ||
@@ -325,14 +597,11 @@ const suggestMenu = async (req, res) => {
     const ingredientResults = [];
     const recipesToCreate = [];
     const missingIngredients = [];
-
-    // --- TAMBAHKAN SET UNTUK MELACAK ID BAHAN YANG SUDAH DIPROSES ---
     const processedBahanIds = new Set();
 
     for (const ingredient of suggested_ingredients) {
       if (!ingredient.nama || typeof ingredient.gramasi === "undefined") {
-        // Cek gramasi juga
-        console.log(`    Format ingredient tidak valid:`, ingredient);
+        console.log(`⚠️  Format ingredient tidak valid:`, ingredient);
         continue;
       }
 
@@ -352,22 +621,21 @@ const suggestMenu = async (req, res) => {
           scientific_alternative: null,
         };
         console.log(
-          `     "${ingredient.nama}" → DITEMUKAN: "${
+          `✅   "${ingredient.nama}" → DITEMUKAN: "${
             searchResult.bahan.nama
           }" (${searchResult.matchType}, ${searchResult.confidence * 100}%)`
         );
       } else {
         console.log(
-          `     "${ingredient.nama}" → TIDAK DITEMUKAN di database, perlu alternatif.`
+          `❌   "${ingredient.nama}" → TIDAK DITEMUKAN di database, perlu alternatif.`
         );
         missingIngredients.push({
           nama: ingredient.nama,
           gramasi: gramasiToUse,
         });
-        statusLog = { status: "pending_alternative" }; // Tandai sebagai menunggu
+        statusLog = { status: "pending_alternative" };
       }
 
-      // Catat hasil pencarian awal (termasuk yang pending)
       ingredientResults.push({
         nama_dicari: ingredient.nama,
         gramasi_saran: gramasiToUse,
@@ -375,36 +643,31 @@ const suggestMenu = async (req, res) => {
         ...statusLog,
       });
 
-      // --- PENGECEKAN DUPLIKASI SEBELUM MENAMBAH KE recipesToCreate ---
       if (bahanIdToUse !== null) {
         if (!processedBahanIds.has(bahanIdToUse)) {
           recipesToCreate.push({
             bahan_id: bahanIdToUse,
             gramasi: gramasiToUse,
           });
-          processedBahanIds.add(bahanIdToUse); // Tandai ID ini sudah dipakai
+          processedBahanIds.add(bahanIdToUse);
         } else {
           console.log(
-            `     -> DUPLIKAT Terdeteksi untuk bahan ID ${bahanIdToUse} ("${searchResult.bahan.nama}"), dilewati.`
+            `⚠️   -> DUPLIKAT Terdeteksi untuk bahan ID ${bahanIdToUse}, dilewati.`
           );
-          // Opsional: Anda bisa menjumlahkan gramasi jika mau
-          // const existingRecipe = recipesToCreate.find(r => r.bahan_id === bahanIdToUse);
-          // if (existingRecipe) existingRecipe.gramasi += gramasiToUse;
         }
       }
     }
 
     console.log(
-      `\n Ringkasan Pencarian Awal: Ditemukan langsung ${processedBahanIds.size}/${suggested_ingredients.length}, Perlu alternatif: ${missingIngredients.length}`
+      `\n📊 Ringkasan Pencarian Awal: Ditemukan langsung ${processedBahanIds.size}/${suggested_ingredients.length}, Perlu alternatif: ${missingIngredients.length}`
     );
 
-    // Proses bahan yang hilang
     if (missingIngredients.length > 0) {
       console.log(
-        `\n Mencari alternatif / data nutrisi untuk ${missingIngredients.length} bahan...`
+        `\n🔬 Mencari alternatif / data nutrisi untuk ${missingIngredients.length} bahan...`
       );
       for (const missing of missingIngredients) {
-        console.log(`\n    Analisis: "${missing.nama}"`);
+        console.log(`\n    🔍 Analisis: "${missing.nama}"`);
         let foundViaAlternative = false;
 
         const logEntry = ingredientResults.find(
@@ -424,7 +687,7 @@ const suggestMenu = async (req, res) => {
           });
           if (altBahan) {
             console.log(
-              `      ALTERNATIF DITEMUKAN: "${altBahan.nama}" (Scientific)`
+              `      ✅ ALTERNATIF DITEMUKAN: "${altBahan.nama}" (Scientific)`
             );
             console.log(`        └─ Alasan: ${altResult.scientific_reason}`);
             console.log(
@@ -455,25 +718,25 @@ const suggestMenu = async (req, res) => {
               processedBahanIds.add(altBahan.id);
             } else {
               console.log(
-                `     -> DUPLIKAT (via Alternatif) Terdeteksi untuk bahan ID ${altBahan.id} ("${altBahan.nama}"), dilewati.`
+                `      ⚠️  -> DUPLIKAT (via Alternatif) untuk bahan ID ${altBahan.id}, dilewati.`
               );
             }
             foundViaAlternative = true;
           } else {
             console.log(
-              `      Alternatif "${altResult.alternative_name}" (disarankan AI) tidak ditemukan di DB`
+              `      ❌ Alternatif "${altResult.alternative_name}" tidak ditemukan di DB`
             );
           }
         } else {
           console.log(
-            `      Tidak ada alternatif scientific untuk "${missing.nama}"`
+            `      ❌ Tidak ada alternatif scientific untuk "${missing.nama}"`
           );
           console.log(`        └─ ${altResult.scientific_reason}`);
         }
 
         if (!foundViaAlternative) {
           console.log(
-            `      -> Mencoba generate nutrisi via AI untuk "${missing.nama}"...`
+            `      🤖 -> Mencoba generate nutrisi via AI untuk "${missing.nama}"...`
           );
           const generatedNutrition = await getIngredientNutrition(missing.nama);
 
@@ -484,7 +747,7 @@ const suggestMenu = async (req, res) => {
               create: generatedNutrition,
             });
             console.log(
-              `      -> Data nutrisi AI untuk "${newOrUpdatedBahan.nama}" disimpan/diupdate di DB (ID: ${newOrUpdatedBahan.id}).`
+              `      ✅ -> Data nutrisi AI untuk "${newOrUpdatedBahan.nama}" disimpan (ID: ${newOrUpdatedBahan.id}).`
             );
 
             if (logEntry) {
@@ -503,12 +766,12 @@ const suggestMenu = async (req, res) => {
               processedBahanIds.add(newOrUpdatedBahan.id);
             } else {
               console.log(
-                `     -> DUPLIKAT (via AI Generate) Terdeteksi untuk bahan ID ${newOrUpdatedBahan.id} ("${newOrUpdatedBahan.nama}"), dilewati.`
+                `      ⚠️  -> DUPLIKAT (via AI Generate) untuk bahan ID ${newOrUpdatedBahan.id}, dilewati.`
               );
             }
           } else {
             console.log(
-              `      -> AI juga GAGAL mendapatkan data nutrisi untuk "${missing.nama}". Bahan ini tidak akan dimasukkan.`
+              `      ❌ -> AI GAGAL mendapatkan data nutrisi untuk "${missing.nama}".`
             );
 
             if (logEntry) {
@@ -532,21 +795,19 @@ const suggestMenu = async (req, res) => {
     ).length;
     const directMatchCount = finalFoundCount - scientificCount;
     console.log(
-      `\n Ringkasan Akhir: Total bahan valid: ${finalFoundCount}/${suggested_ingredients.length} (Direct: ${directMatchCount}, Scientific: ${scientificCount}), Gagal: ${finalNotFoundCount}`
+      `\n📊 Ringkasan Akhir: Total bahan valid: ${finalFoundCount}/${suggested_ingredients.length} (Direct: ${directMatchCount}, Scientific: ${scientificCount}), Gagal: ${finalNotFoundCount}`
     );
 
-    // Buat Menu Baru
     const newMenu = await prisma.menu.create({
       data: { nama: new_menu_name.toLowerCase(), kategori: suggested_category },
     });
     console.log(
-      `\n Menu "${newMenu.nama}" berhasil dibuat di kategori "${suggested_category}"`
+      `\n✅ Menu "${newMenu.nama}" berhasil dibuat di kategori "${suggested_category}"`
     );
     console.log(
-      `\n Membuat ${recipesToCreate.length} resep unik untuk menu "${newMenu.nama}"...`
+      `\n💾 Membuat ${recipesToCreate.length} resep unik untuk menu "${newMenu.nama}"...`
     );
 
-    // Buat Resep Unik
     for (const recipe of recipesToCreate) {
       await prisma.resep.create({
         data: {
@@ -556,9 +817,8 @@ const suggestMenu = async (req, res) => {
         },
       });
     }
-    console.log(`  Berhasil membuat ${recipesToCreate.length} resep unik.`);
+    console.log(`  ✅ Berhasil membuat ${recipesToCreate.length} resep unik.`);
 
-    // Estimasi Nutrisi
     const createdRecipes = await prisma.resep.findMany({
       where: { menu_id: newMenu.id },
       include: { bahan: true },
@@ -573,14 +833,13 @@ const suggestMenu = async (req, res) => {
       totalGramasi += r.gramasi;
     });
     console.log(
-      `\n Estimasi Nutrisi Menu Baru: Gramasi: ${totalGramasi.toFixed(
+      `\n📊 Estimasi Nutrisi Menu Baru: Gramasi: ${totalGramasi.toFixed(
         0
       )}g, Energi: ${totalEnergi.toFixed(
         1
       )} kkal, Protein: ${totalProtein.toFixed(1)}g`
     );
 
-    // Siapkan Respons
     const scientificAlternatives = ingredientResults
       .filter((r) => r.scientific_alternative)
       .map((r) => r.scientific_alternative);
@@ -621,10 +880,9 @@ const suggestMenu = async (req, res) => {
 };
 
 // =================================================================
-// BARU: Fungsi untuk menyimpan menu baru dari Chef
+// FUNGSI LAMA: createMenu
 // =================================================================
 async function createMenu(req, res) {
-  // 1. Ambil data yang dikirim dari frontend (api.js Langkah 1)
   const { menuName, kategori, ingredients } = req.body;
 
   if (!menuName || !ingredients || ingredients.length === 0) {
@@ -634,52 +892,35 @@ async function createMenu(req, res) {
   }
 
   try {
-    // 2. Gunakan Transaksi Prisma
-    // Ini memastikan jika ada 1 bahan gagal, semua proses dibatalkan
     const result = await prisma.$transaction(async (tx) => {
-      // 3. Buat Menu baru di tabel 'Menu'
       const newMenu = await tx.menu.create({
         data: {
           nama: menuName,
-          kategori: kategori, // <-- GANTI DENGAN INI
+          kategori: kategori,
         },
       });
 
-      // 4. Siapkan data untuk tabel pivot 'Resep'
       const resepData = [];
 
-      // 5. Looping setiap bahan yang dikirim Chef
       for (const item of ingredients) {
         let bahanId;
 
-        // Cek status bahan dari frontend
         if (item.status === "found") {
-          // Jika 'found', bahan sudah ada di DB. Kita cari ID-nya
           const existingBahan = await tx.bahan.findUnique({
             where: { nama: item.name },
           });
 
           if (!existingBahan) {
-            // Seharusnya tidak terjadi, tapi untuk jaga-jaga
             throw new Error(`Bahan "${item.name}" tidak ditemukan.`);
           }
           bahanId = existingBahan.id;
         } else if (item.status === "generated") {
-          // Jika 'generated', ini bahan baru dari AI.
-          // Kita 'upsert' (update jika ada, atau create jika baru)
           const newBahan = await tx.bahan.upsert({
-            where: { nama: item.name }, // Cari berdasarkan nama
-            update: {}, // Jika namanya sudah ada, tidak perlu di-update
+            where: { nama: item.name },
+            update: {},
             create: {
-              // Jika baru, buat entri baru
               nama: item.name,
-
-              // --- Ini adalah KUNCI alur validasi ---
-              isValidated: false, // <-- PENTING: Menunggu validasi Ahli Gizi
-
-              // Masukkan semua data nutrisi dari AI
-              // Pastikan nama field di kiri (energi_kkal)
-              // sama persis dengan 'schema.prisma' Anda
+              isValidated: false,
               energi_kkal: item.nutrisi?.energi_kkal || 0,
               protein_g: item.nutrisi?.protein_g || 0,
               lemak_g: item.nutrisi?.lemak_g || 0,
@@ -705,36 +946,152 @@ async function createMenu(req, res) {
           bahanId = newBahan.id;
         }
 
-        // 6. Tambahkan data ke list untuk tabel 'Resep'
         if (bahanId) {
           resepData.push({
-            menu_id: newMenu.id, // <-- GANTI INI
-            bahan_id: bahanId, // <-- GANTI INI JUGA (untuk jaga-jaga)
+            menu_id: newMenu.id,
+            bahan_id: bahanId,
             gramasi: parseFloat(item.gramasi) || 0,
           });
         }
-      } // Akhir dari loop 'for'
+      }
 
-      // 7. Simpan semua data di tabel 'Resep' sekaligus
       await tx.resep.createMany({
         data: resepData,
       });
 
-      return newMenu; // Kembalikan data menu baru jika transaksi sukses
+      return newMenu;
     });
 
-    // 8. Jika Transaksi Sukses, kirim respon 'OK' ke frontend
     res.status(201).json({
       success: true,
       message: `Menu "${result.nama}" berhasil disimpan!`,
       menu: result,
     });
   } catch (error) {
-    // 9. Jika Transaksi Gagal, kirim respon error
     console.error("Error creating menu:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 }
+
+// =================================================================
+// FUNGSI BARU: saveCompositionMenu
+// =================================================================
+const saveCompositionMenu = async (req, res) => {
+  const { nama, komposisi } = req.body;
+
+  const compositionKeys = [
+    "karbo_id",
+    "lauk_id",
+    "sayur_id",
+    "side_dish_id",
+    "buah_id",
+  ];
+  const componentMap = {
+    karbo_id: "karbohidrat",
+    lauk_id: "proteinHewani",
+    sayur_id: "sayur",
+    side_dish_id: "proteinTambahan",
+    buah_id: "buah",
+  };
+
+  const validComponents = compositionKeys
+    .map((key) => {
+      const menu_id = komposisi[key];
+      if (menu_id !== null && menu_id !== undefined && menu_id !== 0) {
+        return [componentMap[key], menu_id];
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  if (validComponents.length === 0) {
+    return res
+      .status(400)
+      .json({ message: "Minimal satu resep komponen harus dipilih." });
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // ✅ PERBAIKAN: Gunakan konstanta yang konsisten
+      const newMenu = await tx.menu.create({
+        data: {
+          nama: nama,
+          kategori: KOMPOSISI_CHEF_KATEGORI,
+        },
+      });
+
+      const compositionData = validComponents.map(([tipe, menu_anak_id]) => ({
+        menu_induk_id: newMenu.id,
+        menu_anak_id: menu_anak_id,
+        tipe_komponen: tipe,
+      }));
+
+      await tx.menuKomposisi.createMany({
+        data: compositionData,
+      });
+
+      return newMenu;
+    });
+
+    const response = {
+      id: result.id,
+      nama: result.nama,
+      message: `Menu komposisi "${result.nama}" berhasil disimpan.`,
+    };
+
+    console.log(
+      `\n🎉 Menu komposisi "${result.nama}" (ID: ${result.id}) berhasil disimpan.`
+    );
+    return res.status(201).json(response);
+  } catch (error) {
+    if (error.code === "P2002") {
+      return res.status(409).json({
+        message: `Nama menu "${nama}" sudah ada. Silakan gunakan nama lain.`,
+      });
+    }
+    console.error("Error saat menyimpan komposisi menu:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// =================================================================
+// ROUTE HANDLER: Get Menu Nutrition by ID
+// =================================================================
+const getMenuNutritionByIdHandler = async (req, res) => {
+  try {
+    const menuId = parseInt(req.params.id);
+    const target = parseInt(req.query.target) || 1; // ✅ BACA TARGET DARI QUERY
+
+    if (isNaN(menuId)) {
+      return res.status(400).json({ message: "ID menu tidak valid." });
+    }
+
+    console.log(
+      `\n📋 [getMenuNutritionByIdHandler] Request untuk menu ID: ${menuId}, target: ${target}`
+    );
+
+    // ✅ Teruskan target ke fungsi perhitungan
+    const result = await getMenuNutritionById(menuId, target);
+
+    if (!result || !result.totalLabel) {
+      return res.status(404).json({
+        message: "Menu tidak ditemukan atau tidak memiliki data gizi.",
+      });
+    }
+
+    console.log(
+      `✅ [getMenuNutritionByIdHandler] Berhasil mengirim data untuk menu ID: ${menuId} (target ${target})`
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("❌ Error di getMenuNutritionByIdHandler:", error);
+    return res.status(500).json({
+      message: "Terjadi kesalahan saat mengambil data gizi menu.",
+      error: error.message,
+    });
+  }
+};
 
 module.exports = {
   getMenus,
@@ -742,4 +1099,6 @@ module.exports = {
   suggestMenu,
   searchMenus,
   createMenu,
+  saveCompositionMenu,
+  getMenuNutritionByIdHandler, // ✅ BARU: Export route handler
 };
