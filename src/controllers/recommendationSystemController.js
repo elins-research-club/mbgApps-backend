@@ -279,13 +279,13 @@ const goals = {
 // maybe still can be adjusted ?
 const WEIGHT_MAP = {
 	// Macros (very important, under:over ≈ 10:1)
-	energi_kkal: { under: 20, over: 2 },
-	protein_g: { under: 20, over: 2 },
+	energi_kkal: { under: 100, over: 2 },
+	protein_g: { under: 100, over: 2 },
 
 	// Other macros (under:over ≈ 8:1)
-	karbohidrat_g: { under: 16, over: 2 },
-	lemak_g: { under: 16, over: 2 },
-	serat_g: { under: 12, over: 1.5 },
+	karbohidrat_g: { under: 100, over: 2 },
+	lemak_g: { under: 100, over: 2 },
+	serat_g: { under: 100, over: 1.5 },
 
 	// Important micros (under:over ≈ 6–8:1)
 
@@ -335,19 +335,20 @@ function buildModel(foods, current, goal) {
 
 		const diff = target[nutrient] - current[nutrient];
 		const maxDiff = goal[nutrient] - current[nutrient];
-
+		console.log(diff);
 		// kalau masih kurang pakai diff buat batas bawah dan target_nutrisi_harian/3 untuk batas atasnya
 		if (diff > 0) {
 			model.constraints[nutrient] = {
 				min: diff,
 				max: maxDiff,
 			};
-		} else {
-			model.constraints[nutrient] = {
-				min: 0,
-				max: maxDiff,
-			};
 		}
+		//   else {
+		// 	model.constraints[nutrient] = {
+		// 		min: 0,
+		// 		max: goal[nutrient],
+		// 	};
+		// }
 	}
 	return model;
 }
@@ -377,6 +378,8 @@ function getRecommendation(
 	const selectedGoal = goals[classGrade];
 	const model = buildModel(dividedFoods, currentNutrition, selectedGoal);
 	const results = solver.Solve(model);
+	console.log(results);
+	console.log(model);
 	const target = {};
 	for (const [nutrient, goalVal] of Object.entries(selectedGoal)) {
 		target[nutrient] = goalVal / 3;
@@ -412,7 +415,8 @@ function getRecommendation(
 			nama: nama,
 			// Asumsi 1 unit LP solver = 100g, jadi kita kalikan jumlahPorsi * 100
 			// Jika 1 unit LP solver adalah 1 porsi, ganti 100 dengan berat 1 porsi (misal 50)
-			gramasi: parseFloat((jumlahPorsi * 100).toFixed(1)),
+			// gramasi: parseFloat((jumlahPorsi * 100).toFixed(1)),
+			gramasi: parseFloat(jumlahPorsi.toFixed(2)),
 		}));
 
 	// 2. Format Kekurangan (nutritionDifference) -> { kekurangan: [...] }
