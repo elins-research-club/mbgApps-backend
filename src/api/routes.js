@@ -6,7 +6,9 @@ const {
   generateNutrition,
   suggestMenu,
   searchMenus,
-  createMenu, // <-- 1. TAMBAHKAN 'createMenu' DI SINI
+  createMenu,
+  saveCompositionMenu,
+  getMenuNutritionByIdHandler, // ✅ BARU: Import route handler untuk get menu by ID
 } = require("../controllers/menuController");
 const { suggestMenuStream } = require("../controllers/streamController");
 const {
@@ -24,9 +26,11 @@ router.get("/menus", getMenus);
 router.post("/generate", generateNutrition);
 router.post("/suggest-menu", suggestMenu);
 
-// --- 2. TAMBAHKAN RUTE BARU DI SINI ---
-router.post("/menu", createMenu); // Endpoint untuk menyimpan resep baru
+// --- TAMBAHAN: Route untuk get nutrition by menu ID ---
+router.get("/menu/:id", getMenuNutritionByIdHandler); // ✅ BARU: Endpoint untuk get menu by ID
 
+router.post("/menu", createMenu); // Endpoint untuk menyimpan resep baru
+router.post("/menu/composition", saveCompositionMenu);
 router.get("/search", searchMenus);
 router.post("/suggest-menu-stream", suggestMenuStream);
 router.post("/ingredients", addIngredients);

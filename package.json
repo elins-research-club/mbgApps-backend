@@ -23,6 +23,6 @@
     "papaparse": "^5.5.3"
   },
   "devDependencies": {
-    "prisma": "^6.16.3"
+    "prisma": "^6.18.0"
   }
 }
