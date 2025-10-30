@@ -333,8 +333,6 @@ function buildModel(foods, current, goal) {
     model.variables[`under_${nutrient}`] = { [nutrient]: -1, obj: w.under };
     model.variables[`over_${nutrient}`] = { [nutrient]: 1, obj: w.over };
     const diff = target[nutrient] - current[nutrient];
-    // jika nilai gizi udah memenuhi, kasih softcap, boleh lebih 5%
-    // kalau masih kurang pakai diff buat batas bawah dan target_nutrisi_harian/3 untuk batas atasnya
     if (diff > 0) {
       model.constraints[nutrient] = {
         min: diff,
@@ -353,118 +351,12 @@ function buildModel(foods, current, goal) {
   return model;
 }
 
-// ------------------------------
-// 5. Solve and summarize
-// ------------------------------
-
-// function getRecommendation(
-// 	currentFoods,
-// 	currentNutrition,
-// 	servingSize = 1,
-// 	classGrade = 1,
-// ) {
-// 	const dividedFoods = Object.fromEntries(
-// 		Object.entries(currentFoods).map(([foodName, nutrients]) => [
-// 			foodName,
-// 			Object.fromEntries(
-// 				Object.entries(nutrients).map(([key, value]) => [
-// 					key,
-// 					value / servingSize,
-// 				]),
-// 			),
-// 		]),
-// 	);
-
-// 	const selectedGoal = goals[classGrade];
-// 	const model = buildModel(dividedFoods, currentNutrition, selectedGoal);
-// 	const results = solver.Solve(model);
-// 	const target = {};
-// 	for (const [nutrient, goalVal] of Object.entries(selectedGoal)) {
-// 		target[nutrient] = goalVal / 3;
-// 	}
-
-// 	// Step 1: Calculate servings to add
-// 	const servingsToAdd = {};
-// 	for (const [food, amount] of Object.entries(results)) {
-// 		if (dividedFoods[food] && amount > 1e-6) {
-// 			servingsToAdd[food] = parseFloat(amount.toFixed(2));
-// 		}
-// 	}
-
-// 	// Step 2: Calculate optimized nutrition after adding servings
-// 	const optimizedNutrition = { ...currentNutrition };
-// 	for (const [food, amount] of Object.entries(servingsToAdd)) {
-// 		for (const [nutrient, val] of Object.entries(dividedFoods[food])) {
-// 			optimizedNutrition[nutrient] =
-// 				(optimizedNutrition[nutrient] || 0) + val * amount;
-// 		}
-// 	}
-
-// 	// Step 3: Compute nutritionDifference (only show positive deficits)
-// 	const nutritionDifference = {};
-// 	for (const [key, goalVal] of Object.entries(target)) {
-// 		const currentVal = optimizedNutrition[key] || 0;
-// 		const diff = goalVal - currentVal;
-// 		nutritionDifference[key] = diff > 0 ? parseFloat(diff.toFixed(2)) : 0;
-// 	}
-
-// 	const saran = Object.entries(servingsToAdd)
-// 		.filter(([, jumlahPorsi]) => jumlahPorsi > 0.01) // Filter yang nilainya sangat kecil
-// 		.map(([nama, jumlahPorsi]) => ({
-// 			nama: nama,
-// 			// Asumsi 1 unit LP solver = 100g, jadi kita kalikan jumlahPorsi * 100
-// 			// Jika 1 unit LP solver adalah 1 porsi, ganti 100 dengan berat 1 porsi (misal 50)
-// 			gramasi: parseFloat((jumlahPorsi * 100).toFixed(1)),
-// 		}));
-
-// 	// 2. Format Kekurangan (nutritionDifference) -> { kekurangan: [...] }
-// 	const defisitList = [];
-// 	for (const [key, value] of Object.entries(nutritionDifference)) {
-// 		if (value > 0.01) {
-// 			// Hanya sertakan nutrisi yang masih defisit (> 0.01)
-// 			let unit = "g";
-// 			let readableKey = key.split("_")[0]; // Ambil nama nutrisi pertama
-
-// 			if (key.includes("kkal")) {
-// 				unit = "kkal";
-// 				readableKey = "Energi";
-// 			} else if (key.includes("mg")) {
-// 				unit = "mg";
-// 			} else if (key.includes("mcg")) {
-// 				unit = "mcg";
-// 			} else if (key.includes("g")) {
-// 				unit = "g";
-// 			}
-
-// 			// Buat nama nutrisi jadi Capitalized (e.g., 'protein_g' -> 'Protein')
-// 			readableKey = readableKey.charAt(0).toUpperCase() + readableKey.slice(1);
-
-// 			defisitList.push(`${readableKey} (${value.toFixed(1)}${unit})`);
-// 		}
-// 	}
-
-// 	// Gabungkan semua defisit menjadi satu string
-// 	const defisitString = defisitList.join(", ");
-
-// 	// Format akhir yang diharapkan oleh RecommendationCard.js
-// 	const kekurangan =
-// 		defisitString.length > 0
-// 			? [{ menu: "Total Menu", kurang: defisitString }]
-// 			: [];
-
-// 	return {
-// 		saran: saran, // Key 'saran'
-// 		kekurangan: kekurangan, // Key 'kekurangan'
-// 	};
-// }
-
 function getRecommendation(
   currentFoods,
   currentNutrition,
   servingSize = 1,
   classGrade = 1
 ) {
-  // 🧩 Tambahan: safety check untuk mencegah null/undefined
   if (
     !currentFoods ||
     typeof currentFoods !== "object" ||
@@ -484,7 +376,6 @@ function getRecommendation(
     classGrade = 1;
   }
 
-  // ⬇️ Mulai logika asli kamu (tidak diubah sama sekali)
   const dividedFoods = Object.fromEntries(
     Object.entries(currentFoods).map(([foodName, nutrients]) => [
       foodName,
@@ -505,7 +396,6 @@ function getRecommendation(
     target[nutrient] = goalVal / 3;
   }
 
-  // Step 1: Calculate servings to add
   const servingsToAdd = {};
   for (const [food, amount] of Object.entries(results)) {
     if (dividedFoods[food] && amount > 1e-6) {
@@ -513,7 +403,6 @@ function getRecommendation(
     }
   }
 
-  // Step 2: Calculate optimized nutrition after adding servings
   const optimizedNutrition = { ...currentNutrition };
   for (const [food, amount] of Object.entries(servingsToAdd)) {
     for (const [nutrient, val] of Object.entries(dividedFoods[food])) {
@@ -522,7 +411,6 @@ function getRecommendation(
     }
   }
 
-  // Step 3: Compute nutritionDifference (only show positive deficits)
   const nutritionDifference = {};
   for (const [key, goalVal] of Object.entries(target)) {
     const currentVal = optimizedNutrition[key] || 0;
@@ -560,7 +448,6 @@ function getRecommendation(
       ? [{ menu: "Total Menu", kurang: defisitString }]
       : [];
 
-  // ✅ Tambahan: pastikan fungsi SELALU return object, bukan null
   return {
     saran: Array.isArray(saran) ? saran : [],
     kekurangan: Array.isArray(kekurangan) ? kekurangan : [],
