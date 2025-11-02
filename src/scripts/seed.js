@@ -33,6 +33,7 @@ const stillMissing = [
   'saus tomat sachet',
   'tepung roti'
 ]
+
 const bahanAliasMapping = {
   'ayam': 'ayam, daging, segar',
   'ayam filet': 'ayam, daging, segar',
@@ -48,7 +49,7 @@ const bahanAliasMapping = {
   'daging': 'sapi, daging, kornet',
   'daun bawang': 'daun bawang merah, segar',
   'daun salam': 'daun salam, bubuk',
-  'dori': 'ikan patin, segar',
+  'dori': 'ikan patin, segar', 
   'gula': 'gula putih',
   'gula merah': 'gula aren',
   'gula pasir': 'gula putih',
@@ -144,8 +145,49 @@ async function seedBahan () {
           niasin_mg: parseValue(row['23']),
           vitamin_c_mg: parseValue(row['24']),
           isValidated: true,
+          validatedBy: 'TKPI',
         }
       })
+    }
+  }
+  // Tambahkan alias sebagai baris baru dengan data nutrisi yang sama
+  for (const [alias, canonical] of Object.entries(bahanAliasMapping)) {
+    const aliasName = cleanString(alias)
+    const canonicalName = cleanString(canonical)
+    const existingAlias = await prisma.bahan.findUnique({ where: { nama: aliasName } })
+    if (!existingAlias) {
+      const canonicalBahan = await prisma.bahan.findUnique({ where: { nama: canonicalName } })
+      if (canonicalBahan) {
+        // Salin data nutrisi
+        const { energi_kkal, protein_g, lemak_g, karbohidrat_g, serat_g, abu_g, kalsium_mg, fosfor_mg, besi_mg, natrium_mg, kalium_mg, tembaga_mg, seng_mg, retinol_mcg, b_kar_mcg, karoten_total_mcg, thiamin_mg, riboflavin_mg, niasin_mg, vitamin_c_mg, isValidated, validatedBy } = canonicalBahan
+        await prisma.bahan.create({
+          data: {
+            nama: aliasName,
+            energi_kkal,
+            protein_g,
+            lemak_g,
+            karbohidrat_g,
+            serat_g,
+            abu_g,
+            kalsium_mg,
+            fosfor_mg,
+            besi_mg,
+            natrium_mg,
+            kalium_mg,
+            tembaga_mg,
+            seng_mg,
+            retinol_mcg,
+            b_kar_mcg,
+            karoten_total_mcg,
+            thiamin_mg,
+            riboflavin_mg,
+            niasin_mg,
+            vitamin_c_mg,
+            isValidated,
+            validatedBy
+          }
+        })
+      }
     }
   }
   console.log('✅ Kamus gizi berhasil dimasukkan.')
