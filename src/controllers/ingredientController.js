@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
-  model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+  model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
   generationConfig: {
     temperature: 0.1,
     topP: 0.8,
@@ -36,6 +36,223 @@ const NUTRIENTS = [
   "niasin_mg",
   "vitamin_c_mg",
 ];
+
+const scientificMatchCache = {};
+async function findBestScientificMatchLLM(ingredientName) {
+  if (scientificMatchCache[ingredientName]) {
+    console.log(`[DEBUG] Returning cached scientific match for: ${ingredientName}`);
+    return scientificMatchCache[ingredientName];
+  }
+  console.log("[DEBUG] Entering findBestScientificMatchLLM with ingredientName:", ingredientName);
+  const allBahan = await prisma.bahan.findMany({ select: { id: true, nama: true } });
+  console.log("[DEBUG] Total candidate ingredients:", allBahan.length);
+  if (allBahan.length === 0) {
+    console.log("[DEBUG] No ingredients found in DB, returning []");
+    return [];
+  }
+  const prompt = `You are a scientific food ingredient assistant. Given an input ingredient and a list of candidate ingredient names from a food database, select the best match(es) based on scientific similarity (genus, family). If no close match, return an empty array.
+
+STRICT RULES:
+1. Return ONLY valid JSON, no markdown, no explanations
+2. Use this format:
+{
+  "ingredient_name": "${ingredientName}",
+  "english_equivalent": "<english name or empty string>",
+  "matches": [
+    {"id": <id_from_list>, "name": "<name_from_list>", "genus": "<genus_name> or else empty_string", "family":"<family_name> or else empty string"}
+  ]
+}
+
+INPUT INGREDIENT: "${ingredientName}"
+CANDIDATE_LIST:
+${allBahan.map((b) => `{"id":${b.id},"name":"${b.nama}"}`).join("\n")}
+
+Return only the JSON object.`;
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+    console.log("[DEBUG] LLM Response genus: ", text);
+    let cleaned = text.replace(/```json|```/g, "").trim();
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+    if (first === -1 || last === -1) {
+      console.log("[DEBUG] LLM response does not contain valid JSON object");
+      return [];
+    }
+    cleaned = cleaned.substring(first, last + 1);
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.log("[DEBUG] JSON.parse error:", parseErr.message, "\nRaw:", cleaned);
+      return [];
+    }
+    if (!parsed.matches || !Array.isArray(parsed.matches) || parsed.matches.length === 0) {
+      console.log("[DEBUG] No matches found in LLM response");
+      scientificMatchCache[ingredientName] = { matches: [], matchedBahan: [] };
+      return scientificMatchCache[ingredientName];
+    }
+    const matchIds = parsed.matches.map((m) => m.id).filter((id) => typeof id === "number");
+    if (matchIds.length === 0) {
+      console.log("[DEBUG] No valid match IDs in LLM response");
+      scientificMatchCache[ingredientName] = { matches: [], matchedBahan: [] };
+      return scientificMatchCache[ingredientName];
+    }
+    const matchedBahan = await prisma.bahan.findMany({ where: { id: { in: matchIds } } });
+    console.log("[DEBUG] Returning matchedBahan:", matchedBahan.map(b => b.nama));
+    scientificMatchCache[ingredientName] = { matches: parsed.matches, matchedBahan };
+    return scientificMatchCache[ingredientName];
+  } catch (err) {
+    console.error("[DEBUG] LLM scientific match error:", err.message);
+    scientificMatchCache[ingredientName] = { matches: [], matchedBahan: [] };
+    return scientificMatchCache[ingredientName];
+  }
+}
+async function estimateIngredientWithLLM(ingredientName) {
+  try {
+    // Step 1: Try to find best scientific/genus/family match from DB using LLM (single call)
+    console.log("Testing is it working")
+    const sciResult = await findBestScientificMatchLLM(ingredientName);
+    console.log("Testing is it working after calling similar");
+    if (sciResult && sciResult.matchedBahan && sciResult.matchedBahan.length > 0) {
+      const candidates = sciResult.matches.map((m) => {
+        const row = sciResult.matchedBahan.find((b) => b.id === m.id);
+        return {
+          id: m.id,
+          name: m.name,
+          genus: m.genus,
+          family: m.family,
+          ...(row ? { nutrition: row } : {}),
+        };
+      });
+      try {
+        const { id, nama, isValidated, validatedBy, ...nutritionFields } = sciResult.matchedBahan[0] || {};
+        const savedBahan = await prisma.bahan.create({
+          data: {
+            nama: ingredientName,
+            isValidated: false,
+            validatedBy: 'genus',
+            ...nutritionFields,
+          },
+        });
+        console.log(`✅ Saved scientific-match ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`);
+      } catch (saveError) {
+        console.error(`❌ Failed to save scientific-match ingredient "${ingredientName}" to database:`, saveError.message);
+      }
+      return {
+        name: ingredientName,
+        method: "scientific-match-llm",
+        candidates,
+        predicted_composition: sciResult.matchedBahan[0],
+        provenance: {
+          genus_family: sciResult.matches,
+        },
+        confidence: 1.0,
+      };
+    }
+
+    // Step 2: Fallback to LLM nutrient estimation
+    const allNames = await prisma.bahan.findMany({
+      select: { id: true, nama: true },
+    });
+    const existingMenus = allNames.map((b) => ({ id: b.id, name: b.nama }));
+    const llm = await getLLMPrediction(ingredientName, existingMenus);
+
+    const candidatePromises = (llm.candidates || []).map(async (c) => {
+      if (c.id != null)
+        return await prisma.bahan.findUnique({ where: { id: c.id } });
+      if (c.name)
+        return await prisma.bahan.findFirst({
+          where: { nama: { equals: c.name } },
+        });
+      return null;
+    });
+    const candidateRows = (await Promise.all(candidatePromises)).filter(Boolean);
+
+    if (candidateRows.length > 0) {
+      const mapped = [];
+      for (const c of llm.candidates || []) {
+        const row =
+          c.id != null
+            ? candidateRows.find((r) => r.id === c.id)
+            : candidateRows.find(
+                (r) =>
+                  String(r.nama).toLowerCase() ===
+                  String(c.name || "").toLowerCase()
+              );
+        if (row)
+          mapped.push({
+            row,
+            score: typeof c.score === "number" ? c.score : null,
+          });
+      }
+
+      const weightsRaw = mapped.map((m) => (m.score != null ? m.score : 1));
+      const sumW = weightsRaw.reduce((a, b) => a + b, 0) || 1;
+      const weights = weightsRaw.map((w) => w / sumW);
+
+      const estimated = {};
+      NUTRIENTS.forEach((n) => {
+        estimated[n] = mapped.reduce(
+          (acc, m, j) =>
+            acc + (m.row[n] != null ? Number(m.row[n]) : 0) * weights[j],
+          0
+        );
+        estimated[n] = Number((estimated[n] || 0).toFixed(4));
+      });
+
+      try {
+        const savedBahan = await prisma.bahan.create({
+          data: {
+            nama: ingredientName,
+            isValidated: false,
+            ...estimated,
+            validatedBy: 'LLM',
+          },
+        });
+        console.log(
+          `✅ Saved LLM-predicted ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`
+        );
+      } catch (saveError) {
+        console.error(
+          `❌ Failed to save ingredient "${ingredientName}" to database:`,
+          saveError.message
+        );
+      }
+
+      return {
+        name: ingredientName,
+        method: "llm-candidates",
+        english_equivalent: llm.english_equivalent || null,
+        candidates: mapped.map((m, i) => ({
+          id: m.row.id,
+          name: m.row.nama,
+          weight: weights[i],
+        })),
+        predicted_composition: estimated,
+        provenance: {
+          llm_candidates: llm.candidates || [],
+          tkpi_candidates: mapped.map((m) => ({
+            id: m.row.id,
+            name: m.row.nama,
+          })),
+        },
+        confidence: llm.confidence,
+      };
+    }
+  } catch (err) {
+    console.error("DB lookup error in estimateIngredientWithLLM:", err);
+  }
+  return {
+    name: ingredientName,
+    method: "none",
+    candidates: [],
+    predicted_composition: null,
+    provenance: {},
+    confidence: 0,
+  };
+}
 
 async function getLLMPrediction(ingredientName, existingMenus) {
   const prompt = `You are a precise food ingredient mapping assistant. Your task is to find the most similar items from the TKPI (Indonesian Food Composition Table) database.
@@ -147,109 +364,6 @@ Return only the JSON object:`;
   return { ingredient_name: ingredientName, candidates: [], confidence: 0 };
 }
 
-async function estimateIngredientWithLLM(ingredientName) {
-  try {
-    const allNames = await prisma.bahan.findMany({
-      select: { id: true, nama: true },
-    });
-    const existingMenus = allNames.map((b) => ({ id: b.id, name: b.nama }));
-    const llm = await getLLMPrediction(ingredientName, existingMenus);
-
-    const candidatePromises = (llm.candidates || []).map(async (c) => {
-      if (c.id != null)
-        return await prisma.bahan.findUnique({ where: { id: c.id } });
-      if (c.name)
-        return await prisma.bahan.findFirst({
-          where: { nama: { equals: c.name } },
-        });
-      return null;
-    });
-    const candidateRows = (await Promise.all(candidatePromises)).filter(
-      Boolean
-    );
-
-    if (candidateRows.length > 0) {
-      const mapped = [];
-      for (const c of llm.candidates || []) {
-        const row =
-          c.id != null
-            ? candidateRows.find((r) => r.id === c.id)
-            : candidateRows.find(
-                (r) =>
-                  String(r.nama).toLowerCase() ===
-                  String(c.name || "").toLowerCase()
-              );
-        if (row)
-          mapped.push({
-            row,
-            score: typeof c.score === "number" ? c.score : null,
-          });
-      }
-
-      const weightsRaw = mapped.map((m) => (m.score != null ? m.score : 1));
-      const sumW = weightsRaw.reduce((a, b) => a + b, 0) || 1;
-      const weights = weightsRaw.map((w) => w / sumW);
-
-      const estimated = {};
-      NUTRIENTS.forEach((n) => {
-        estimated[n] = mapped.reduce(
-          (acc, m, j) =>
-            acc + (m.row[n] != null ? Number(m.row[n]) : 0) * weights[j],
-          0
-        );
-        estimated[n] = Number((estimated[n] || 0).toFixed(4));
-      });
-
-      try {
-        const savedBahan = await prisma.bahan.create({
-          data: {
-            nama: ingredientName,
-            isValidated: false,
-            ...estimated,
-          },
-        });
-        console.log(
-          `✅ Saved LLM-predicted ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`
-        );
-      } catch (saveError) {
-        console.error(
-          `❌ Failed to save ingredient "${ingredientName}" to database:`,
-          saveError.message
-        );
-      }
-
-      return {
-        name: ingredientName,
-        method: "llm-candidates",
-        english_equivalent: llm.english_equivalent || null,
-        candidates: mapped.map((m, i) => ({
-          id: m.row.id,
-          name: m.row.nama,
-          weight: weights[i],
-        })),
-        predicted_composition: estimated,
-        provenance: {
-          llm_candidates: llm.candidates || [],
-          tkpi_candidates: mapped.map((m) => ({
-            id: m.row.id,
-            name: m.row.nama,
-          })),
-        },
-        confidence: llm.confidence,
-      };
-    }
-  } catch (err) {
-    console.error("DB lookup error in estimateIngredientWithLLM:", err);
-  }
-  return {
-    name: ingredientName,
-    method: "none",
-    candidates: [],
-    predicted_composition: null,
-    provenance: {},
-    confidence: 0,
-  };
-}
 
 async function getNotValidatedIngredients(req, res) {
   try {
@@ -304,7 +418,6 @@ async function editIngredientsNutritions(req, res) {
     const { id } = req.params;
     const { ingredientData } = req.body;
 
-    // Definisikan 'updates' sebagai objek nutrisi itu sendiri
     const updates = ingredientData;
 
     // Validate that ID is provided
@@ -435,24 +548,18 @@ async function searchIngredients(req, res) {
   try {
     let ingredients;
     if (exact === "true") {
-      // --- PERUBAHAN DI SINI ---
-      // 'mode: "insensitive"' telah dihapus
       ingredients = await prisma.bahan.findMany({
         where: {
           nama: {
             equals: q,
-            // mode: "insensitive", // <-- DIHAPUS
           },
         },
       });
     } else {
-      // --- PERUBAHAN DI SINI ---
-      // 'mode: "insensitive"' telah dihapus
       ingredients = await prisma.bahan.findMany({
         where: {
           nama: {
             contains: q,
-            // mode: "insensitive", // <-- DIHAPUS
           },
         },
         take: 10,
@@ -562,6 +669,7 @@ async function addIngredients(req, res) {
       data: {
         ...ingredientData,
         isValidated: true,
+        validatedBy: 'Ahli Gizi',
       },
       select: {
         id: true,
