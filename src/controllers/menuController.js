@@ -7,7 +7,10 @@ const {
 	findSimilarMenu,
 	getIngredientNutrition,
 } = require("../services/aiService");
-const { getRecommendation } = require("./recommendationSystemController");
+const {
+	getRecommendation,
+	getAllRecommendation,
+} = require("./recommendationSystemController");
 
 // =================================================================
 // HELPER: Fungsi pencarian bahan
@@ -237,13 +240,13 @@ const generateNutrition = async (req, res) => {
 		};
 
 		// minta rekomendasi pakai linear programming
-		const rekomendasi = getRecommendation(
-			nutrisiPerResep,
-			totalGizi,
-			1,
-			target,
-		);
-		console.log(nutrisiPerResep);
+		// const rekomendasi = getRecommendation(
+		// 	nutrisiPerResep,
+		// 	totalGizi,
+		// 	1,
+		// 	target,
+		// );
+		const rekomendasi = getAllRecommendation(nutrisiPerResep, totalGizi);
 		const response = {
 			// Objek Label Gizi Total
 			totalLabel: {
