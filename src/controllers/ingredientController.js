@@ -38,13 +38,94 @@ const NUTRIENTS = [
 ];
 
 const scientificMatchCache = {};
+async function getEnglishEquivalent(ingredientName) {
+  const prompt = `Translate the following Indonesian ingredient name to English: "${ingredientName}". Return only the English name, nothing else.`;
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+    return text.trim();
+  } catch (err) {
+    console.error("Error getting English equivalent:", err.message);
+    return ingredientName; // fallback to original
+  }
+}
+
+async function searchUSDA(englishName) {
+  const apiKey = process.env.USDA_API_KEY;
+  if (!apiKey) {
+    console.error("USDA API key not found");
+    return [];
+  }
+  const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${apiKey}&query=${encodeURIComponent(
+    englishName
+  )}&requireAllWords=true&dataType=Foundation`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    return data.foods || [];
+  } catch (err) {
+    console.error("USDA API error:", err.message);
+    return [];
+  }
+}
+
+async function mapUSDAtoDb(usdaFood, originalName) {
+  const nutrientMap = {
+    1003: "protein_g",
+    1004: "lemak_g",
+    1005: "karbohidrat_g",
+    1008: "energi_kkal",
+    1093: "natrium_mg",
+    1099: "kalium_mg",
+    1109: "serat_g",
+    1110: "abu_g",
+    1162: "kalsium_mg",
+    1165: "besi_mg",
+    1166: "seng_mg",
+    1170: "tembaga_mg",
+    1177: "fosfor_mg",
+    1180: "retinol_mcg",
+    1183: "b_kar_mcg",
+    1185: "karoten_total_mcg",
+    1167: "thiamin_mg",
+    1175: "riboflavin_mg",
+    1169: "niasin_mg",
+    1186: "vitamin_c_mg",
+  };
+  const dbNutrients = {};
+  NUTRIENTS.forEach((n) => (dbNutrients[n] = 0));
+
+  const servingSize = usdaFood.servingSize || 100;
+  usdaFood.foodNutrients.forEach((fn) => {
+    const dbKey = nutrientMap[fn.nutrientId];
+    if (dbKey) {
+      dbNutrients[dbKey] = (fn.value / servingSize) * 100;
+    }
+  });
+
+  return {
+    nama: originalName,
+    isValidated: true,
+    validatedBy: "USDA",
+    ...dbNutrients,
+  };
+}
 async function findBestScientificMatchLLM(ingredientName) {
   if (scientificMatchCache[ingredientName]) {
-    console.log(`[DEBUG] Returning cached scientific match for: ${ingredientName}`);
+    console.log(
+      `[DEBUG] Returning cached scientific match for: ${ingredientName}`
+    );
     return scientificMatchCache[ingredientName];
   }
-  console.log("[DEBUG] Entering findBestScientificMatchLLM with ingredientName:", ingredientName);
-  const allBahan = await prisma.bahan.findMany({ select: { id: true, nama: true } });
+  console.log(
+    "[DEBUG] Entering findBestScientificMatchLLM with ingredientName:",
+    ingredientName
+  );
+  const allBahan = await prisma.bahan.findMany({
+    select: { id: true, nama: true },
+  });
   console.log("[DEBUG] Total candidate ingredients:", allBahan.length);
   if (allBahan.length === 0) {
     console.log("[DEBUG] No ingredients found in DB, returning []");
@@ -85,23 +166,42 @@ Return only the JSON object.`;
     try {
       parsed = JSON.parse(cleaned);
     } catch (parseErr) {
-      console.log("[DEBUG] JSON.parse error:", parseErr.message, "\nRaw:", cleaned);
+      console.log(
+        "[DEBUG] JSON.parse error:",
+        parseErr.message,
+        "\nRaw:",
+        cleaned
+      );
       return [];
     }
-    if (!parsed.matches || !Array.isArray(parsed.matches) || parsed.matches.length === 0) {
+    if (
+      !parsed.matches ||
+      !Array.isArray(parsed.matches) ||
+      parsed.matches.length === 0
+    ) {
       console.log("[DEBUG] No matches found in LLM response");
       scientificMatchCache[ingredientName] = { matches: [], matchedBahan: [] };
       return scientificMatchCache[ingredientName];
     }
-    const matchIds = parsed.matches.map((m) => m.id).filter((id) => typeof id === "number");
+    const matchIds = parsed.matches
+      .map((m) => m.id)
+      .filter((id) => typeof id === "number");
     if (matchIds.length === 0) {
       console.log("[DEBUG] No valid match IDs in LLM response");
       scientificMatchCache[ingredientName] = { matches: [], matchedBahan: [] };
       return scientificMatchCache[ingredientName];
     }
-    const matchedBahan = await prisma.bahan.findMany({ where: { id: { in: matchIds } } });
-    console.log("[DEBUG] Returning matchedBahan:", matchedBahan.map(b => b.nama));
-    scientificMatchCache[ingredientName] = { matches: parsed.matches, matchedBahan };
+    const matchedBahan = await prisma.bahan.findMany({
+      where: { id: { in: matchIds } },
+    });
+    console.log(
+      "[DEBUG] Returning matchedBahan:",
+      matchedBahan.map((b) => b.nama)
+    );
+    scientificMatchCache[ingredientName] = {
+      matches: parsed.matches,
+      matchedBahan,
+    };
     return scientificMatchCache[ingredientName];
   } catch (err) {
     console.error("[DEBUG] LLM scientific match error:", err.message);
@@ -111,11 +211,56 @@ Return only the JSON object.`;
 }
 async function estimateIngredientWithLLM(ingredientName) {
   try {
-    // Step 1: Try to find best scientific/genus/family match from DB using LLM (single call)
-    console.log("Testing is it working")
+    // Step 1: Get English equivalent
+    const englishName = await getEnglishEquivalent(ingredientName);
+    console.log(`English equivalent: ${englishName}`);
+
+    // Step 2: Search USDA API
+    const usdaFoods = await searchUSDA(englishName);
+    console.log(`USDA results: ${usdaFoods.length} foods found`);
+
+    // Step 3: Find matching description
+    let matchedUSDA = null;
+    for (const food of usdaFoods) {
+      if (
+        food.description.toLowerCase().startsWith(englishName.toLowerCase())
+      ) {
+        matchedUSDA = food;
+        console.log(
+          `Matched USDA food by startsWith: ${matchedUSDA.description}`
+        );
+        break; // Take the first match that starts with the name
+      }
+    }
+
+    if (matchedUSDA) {
+      const dbData = await mapUSDAtoDb(matchedUSDA, ingredientName);
+      try {
+        const savedBahan = await prisma.bahan.create({ data: dbData });
+        console.log(
+          `✅ Saved USDA ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`
+        );
+        return {
+          name: ingredientName,
+          method: "usda-api",
+          predicted_composition: dbData,
+          confidence: 1.0,
+        };
+      } catch (saveError) {
+        console.error(
+          `❌ Failed to save USDA ingredient "${ingredientName}":`,
+          saveError.message
+        );
+      }
+    }
+
+    // Step 4: If no USDA match, try scientific LLM match
     const sciResult = await findBestScientificMatchLLM(ingredientName);
-    console.log("Testing is it working after calling similar");
-    if (sciResult && sciResult.matchedBahan && sciResult.matchedBahan.length > 0) {
+    if (
+      sciResult &&
+      sciResult.matchedBahan &&
+      sciResult.matchedBahan.length > 0
+    ) {
       const candidates = sciResult.matches.map((m) => {
         const row = sciResult.matchedBahan.find((b) => b.id === m.id);
         return {
@@ -127,18 +272,24 @@ async function estimateIngredientWithLLM(ingredientName) {
         };
       });
       try {
-        const { id, nama, isValidated, validatedBy, ...nutritionFields } = sciResult.matchedBahan[0] || {};
+        const { id, nama, isValidated, validatedBy, ...nutritionFields } =
+          sciResult.matchedBahan[0] || {};
         const savedBahan = await prisma.bahan.create({
           data: {
             nama: ingredientName,
             isValidated: false,
-            validatedBy: 'genus',
+            validatedBy: "genus",
             ...nutritionFields,
           },
         });
-        console.log(`✅ Saved scientific-match ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`);
+        console.log(
+          `✅ Saved scientific-match ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`
+        );
       } catch (saveError) {
-        console.error(`❌ Failed to save scientific-match ingredient "${ingredientName}" to database:`, saveError.message);
+        console.error(
+          `❌ Failed to save scientific-match ingredient "${ingredientName}" to database:`,
+          saveError.message
+        );
       }
       return {
         name: ingredientName,
@@ -152,7 +303,7 @@ async function estimateIngredientWithLLM(ingredientName) {
       };
     }
 
-    // Step 2: Fallback to LLM nutrient estimation
+    // Step 5: Fallback to LLM nutrient estimation
     const allNames = await prisma.bahan.findMany({
       select: { id: true, nama: true },
     });
@@ -168,7 +319,9 @@ async function estimateIngredientWithLLM(ingredientName) {
         });
       return null;
     });
-    const candidateRows = (await Promise.all(candidatePromises)).filter(Boolean);
+    const candidateRows = (await Promise.all(candidatePromises)).filter(
+      Boolean
+    );
 
     if (candidateRows.length > 0) {
       const mapped = [];
@@ -208,7 +361,7 @@ async function estimateIngredientWithLLM(ingredientName) {
             nama: ingredientName,
             isValidated: false,
             ...estimated,
-            validatedBy: 'LLM',
+            validatedBy: "LLM",
           },
         });
         console.log(
@@ -363,7 +516,6 @@ Return only the JSON object:`;
 
   return { ingredient_name: ingredientName, candidates: [], confidence: 0 };
 }
-
 
 async function getNotValidatedIngredients(req, res) {
   try {
@@ -669,7 +821,7 @@ async function addIngredients(req, res) {
       data: {
         ...ingredientData,
         isValidated: true,
-        validatedBy: 'Ahli Gizi',
+        validatedBy: "Ahli Gizi",
       },
       select: {
         id: true,
