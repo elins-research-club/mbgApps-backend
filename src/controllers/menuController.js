@@ -630,24 +630,61 @@ const suggestMenu = async (req, res) => {
 // BARU: Fungsi untuk menyimpan menu baru dari Chef
 // =================================================================
 async function createMenu(req, res) {
-	// 1. Ambil data yang dikirim dari frontend (api.js Langkah 1)
-	const { menuName, kategori, ingredients } = req.body;
+	 // 1. Ambil data yang dikirim dari frontend (api.js Langkah 1)
+    const { menuName, ingredients } = req.body; // Remove kategori from req.body
 
-	if (!menuName || !ingredients || ingredients.length === 0) {
-		return res
-			.status(400)
-			.json({ message: "Nama menu dan bahan tidak boleh kosong." });
-	}
+    if (!menuName || !ingredients || ingredients.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "Nama menu dan bahan tidak boleh kosong." });
+    }
 
-	try {
-		// 2. Gunakan Transaksi Prisma
-		// Ini memastikan jika ada 1 bahan gagal, semua proses dibatalkan
+    try {
+        // 2. Calculate total nutrition to determine kategori
+        let totalNutrition = {
+            energi_kkal: 0,
+            protein_g: 0,
+            lemak_g: 0,
+            karbohidrat_g: 0,
+            serat_g: 0,
+            vitamin_c_mg: 0,
+        };
+
+        for (const item of ingredients) {
+            if (item.nutrisi) {
+                const ratio = (item.gramasi || 100) / 100; // Assume 100g if not specified
+                totalNutrition.energi_kkal += (item.nutrisi.energi_kkal || 0) * ratio;
+                totalNutrition.protein_g += (item.nutrisi.protein_g || 0) * ratio;
+                totalNutrition.lemak_g += (item.nutrisi.lemak_g || 0) * ratio;
+                totalNutrition.karbohidrat_g += (item.nutrisi.karbohidrat_g || 0) * ratio;
+                totalNutrition.serat_g += (item.nutrisi.serat_g || 0) * ratio;
+                totalNutrition.vitamin_c_mg += (item.nutrisi.vitamin_c_mg || 0) * ratio;
+            }
+        }
+
+        // Determine kategori based on dominant nutrient
+        let kategori = "side_dish"; // Default
+        const { karbohidrat_g, protein_g, vitamin_c_mg, serat_g, kalsium_mg, lemak_g } = totalNutrition;
+
+        if (kalsium_mg > karbohidrat_g && kalsium_mg > protein_g && kalsium_mg > vitamin_c_mg && kalsium_mg > lemak_g) {
+            kategori = "kalsium";
+        } else if (lemak_g > karbohidrat_g && lemak_g > protein_g && lemak_g > vitamin_c_mg && lemak_g > kalsium_mg) {
+            kategori = "fat";
+        } else if (karbohidrat_g > protein_g && karbohidrat_g > vitamin_c_mg && karbohidrat_g > lemak_g && karbohidrat_g > kalsium_mg) {
+            kategori = "karbo";
+        } else if (protein_g > karbohidrat_g && protein_g > vitamin_c_mg && protein_g > lemak_g && protein_g > kalsium_mg) {
+            kategori = "protein";
+        } else if (vitamin_c_mg > karbohidrat_g && vitamin_c_mg > protein_g && vitamin_c_mg > lemak_g && vitamin_c_mg > kalsium_mg) {
+            kategori = serat_g > vitamin_c_mg ? "serat" : "vitamin";
+        }
+
+        console.log(`Determined kategori: ${kategori} based on total nutrition:`, totalNutrition);
+
 		const result = await prisma.$transaction(async (tx) => {
-			// 3. Buat Menu baru di tabel 'Menu'
 			const newMenu = await tx.menu.create({
 				data: {
 					nama: menuName,
-					kategori: kategori, // <-- GANTI DENGAN INI
+					kategori: kategori,
 				},
 			});
 
@@ -732,12 +769,12 @@ async function createMenu(req, res) {
 		// 8. Jika Transaksi Sukses, kirim respon 'OK' ke frontend
 		res.status(201).json({
 			success: true,
-			message: `Menu "${result.nama}" berhasil disimpan!`,
+			message: `Resep "${result.nama}" berhasil disimpan!`,
 			menu: result,
 		});
 	} catch (error) {
 		// 9. Jika Transaksi Gagal, kirim respon error
-		console.error("Error creating menu:", error);
+		console.error("Error creating resep:", error);
 		res.status(500).json({ success: false, message: error.message });
 	}
 }
