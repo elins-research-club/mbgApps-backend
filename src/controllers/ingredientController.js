@@ -304,6 +304,7 @@ async function estimateIngredientWithLLM(ingredientName) {
     }
 
     // Step 5: Fallback to LLM nutrient estimation
+    // Step 5: Fallback to LLM nutrient estimation
     const allNames = await prisma.bahan.findMany({
       select: { id: true, nama: true },
     });
