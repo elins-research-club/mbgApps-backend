@@ -7,11 +7,12 @@ const solver = require("javascript-lp-solver");
 // ------------------------------
 const goals = {
 	1: {
-		energi_kkal: 1650,
-		protein_g: 40,
-		lemak_g: 55,
-		karbohidrat_g: 250,
-		serat_g: 23,
+		// TK A
+		energi_kkal: 1350,
+		protein_g: 20,
+		lemak_g: 45,
+		karbohidrat_g: 215,
+		serat_g: 19,
 		// abu_g: 5, // optional, tidak tercantum di AKG resmi
 		// kalsium_mg: 1000,
 		// fosfor_mg: 500,
@@ -29,11 +30,12 @@ const goals = {
 		// vitamin_c_mg: 45,
 	},
 	2: {
-		energi_kkal: 1650,
-		protein_g: 40,
-		lemak_g: 55,
+		// TK B
+		energi_kkal: 1400,
+		protein_g: 25,
+		lemak_g: 50,
 		karbohidrat_g: 250,
-		serat_g: 23,
+		serat_g: 20,
 		// abu_g: 5, // optional, tidak tercantum di AKG resmi
 		// kalsium_mg: 1000,
 		// fosfor_mg: 500,
@@ -51,6 +53,7 @@ const goals = {
 		// vitamin_c_mg: 45,
 	},
 	3: {
+		//SD 1
 		energi_kkal: 1650,
 		protein_g: 40,
 		lemak_g: 55,
@@ -73,50 +76,53 @@ const goals = {
 		// vitamin_c_mg: 45,
 	},
 	4: {
-		energi_kkal: 2000,
-		protein_g: 50,
-		lemak_g: 65,
-		karbohidrat_g: 300,
-		serat_g: 28,
+		// SD 2
+		energi_kkal: 1650,
+		protein_g: 40,
+		lemak_g: 55,
+		karbohidrat_g: 250,
+		serat_g: 23,
 		// abu_g: 5, // optional, tidak tercantum di AKG resmi
 		// kalsium_mg: 1000,
-		// fosfor_mg: 1250,
-		// besi_mg: 8,
-		// natrium_mg: 1300,
-		// kalium_mg: 3900,
-		// tembaga_mg: 700,
-		// seng_mg: 8,
+		// fosfor_mg: 500,
+		// besi_mg: 10,
+		// natrium_mg: 1000,
+		// kalium_mg: 3200,
+		// tembaga_mg: 570,
+		// seng_mg: 5,
 		// retinol_mcg: 500,
 		// b_kar_mcg: 3600,
 		// karoten_total_mcg: 4000,
 		// thiamin_mg: 1.1,
-		// riboflavin_mg: 1.3,
-		// niasin_mg: 12,
-		// vitamin_c_mg: 50,
+		// riboflavin_mg: 1.1,
+		// niasin_mg: 10,
+		// vitamin_c_mg: 45,
 	},
 	5: {
-		energi_kkal: 2000,
-		protein_g: 50,
-		lemak_g: 65,
-		karbohidrat_g: 300,
-		serat_g: 28,
+		//SD 3
+		energi_kkal: 1650,
+		protein_g: 40,
+		lemak_g: 55,
+		karbohidrat_g: 250,
+		serat_g: 23,
 		// abu_g: 5, // optional, tidak tercantum di AKG resmi
 		// kalsium_mg: 1000,
-		// fosfor_mg: 1250,
-		// besi_mg: 8,
-		// natrium_mg: 1300,
-		// kalium_mg: 3900,
-		// tembaga_mg: 700,
-		// seng_mg: 8,
+		// fosfor_mg: 500,
+		// besi_mg: 10,
+		// natrium_mg: 1000,
+		// kalium_mg: 3200,
+		// tembaga_mg: 570,
+		// seng_mg: 5,
 		// retinol_mcg: 500,
 		// b_kar_mcg: 3600,
 		// karoten_total_mcg: 4000,
 		// thiamin_mg: 1.1,
-		// riboflavin_mg: 1.3,
-		// niasin_mg: 12,
-		// vitamin_c_mg: 50,
+		// riboflavin_mg: 1.1,
+		// niasin_mg: 10,
+		// vitamin_c_mg: 45,
 	},
 	6: {
+		//SD 4
 		energi_kkal: 2000,
 		protein_g: 50,
 		lemak_g: 65,
@@ -139,28 +145,53 @@ const goals = {
 		// vitamin_c_mg: 50,
 	},
 	7: {
-		energi_kkal: 2400,
-		protein_g: 70,
-		lemak_g: 80,
-		karbohidrat_g: 350,
-		serat_g: 34,
+		//SD 5
+		energi_kkal: 2000,
+		protein_g: 50,
+		lemak_g: 65,
+		karbohidrat_g: 300,
+		serat_g: 28,
 		// abu_g: 5, // optional, tidak tercantum di AKG resmi
-		// kalsium_mg: 1200,
+		// kalsium_mg: 1000,
 		// fosfor_mg: 1250,
-		// besi_mg: 11,
-		// natrium_mg: 1500,
-		// kalium_mg: 4800,
-		// tembaga_mg: 795,
-		// seng_mg: 11,
+		// besi_mg: 8,
+		// natrium_mg: 1300,
+		// kalium_mg: 3900,
+		// tembaga_mg: 700,
+		// seng_mg: 8,
 		// retinol_mcg: 500,
 		// b_kar_mcg: 3600,
 		// karoten_total_mcg: 4000,
-		// thiamin_mg: 1.2,
+		// thiamin_mg: 1.1,
 		// riboflavin_mg: 1.3,
-		// niasin_mg: 16,
-		// vitamin_c_mg: 75,
+		// niasin_mg: 12,
+		// vitamin_c_mg: 50,
 	},
 	8: {
+		//SD 6
+		energi_kkal: 2000,
+		protein_g: 50,
+		lemak_g: 65,
+		karbohidrat_g: 300,
+		serat_g: 28,
+		// abu_g: 5, // optional, tidak tercantum di AKG resmi
+		// kalsium_mg: 1000,
+		// fosfor_mg: 1250,
+		// besi_mg: 8,
+		// natrium_mg: 1300,
+		// kalium_mg: 3900,
+		// tembaga_mg: 700,
+		// seng_mg: 8,
+		// retinol_mcg: 500,
+		// b_kar_mcg: 3600,
+		// karoten_total_mcg: 4000,
+		// thiamin_mg: 1.1,
+		// riboflavin_mg: 1.3,
+		// niasin_mg: 12,
+		// vitamin_c_mg: 50,
+	},
+	9: {
+		// SMP 1
 		energi_kkal: 2400,
 		protein_g: 70,
 		lemak_g: 80,
@@ -182,41 +213,20 @@ const goals = {
 		// niasin_mg: 16,
 		// vitamin_c_mg: 75,
 	},
-	9: {
-		energi_kkal: 2650,
-		protein_g: 75,
-		lemak_g: 85,
-		karbohidrat_g: 400,
-		serat_g: 37,
-		// abu_g: 5, // optional, tidak tercantum di AKG resmi
-		// kalsium_mg: 1200,
-		// fosfor_mg: 1250,
-		// besi_mg: 9,
-		// natrium_mg: 1700,
-		// kalium_mg: 5300,
-		// tembaga_mg: 890,
-		// seng_mg: 11,
-		// retinol_mcg: 500,
-		// b_kar_mcg: 3600,
-		// karoten_total_mcg: 4000,
-		// thiamin_mg: 1.2,
-		// riboflavin_mg: 1.3,
-		// niasin_mg: 16,
-		// vitamin_c_mg: 90,
-	},
 	10: {
-		energi_kkal: 2650,
-		protein_g: 75,
-		lemak_g: 85,
-		karbohidrat_g: 400,
-		serat_g: 37,
+		//SMP 2
+		energi_kkal: 2400,
+		protein_g: 70,
+		lemak_g: 80,
+		karbohidrat_g: 350,
+		serat_g: 34,
 		// abu_g: 5, // optional, tidak tercantum di AKG resmi
 		// kalsium_mg: 1200,
 		// fosfor_mg: 1250,
-		// besi_mg: 9,
-		// natrium_mg: 1700,
-		// kalium_mg: 5300,
-		// tembaga_mg: 890,
+		// besi_mg: 11,
+		// natrium_mg: 1500,
+		// kalium_mg: 4800,
+		// tembaga_mg: 795,
 		// seng_mg: 11,
 		// retinol_mcg: 500,
 		// b_kar_mcg: 3600,
@@ -224,9 +234,10 @@ const goals = {
 		// thiamin_mg: 1.2,
 		// riboflavin_mg: 1.3,
 		// niasin_mg: 16,
-		// vitamin_c_mg: 90,
+		// vitamin_c_mg: 75,
 	},
 	11: {
+		//SMP 3
 		energi_kkal: 2650,
 		protein_g: 75,
 		lemak_g: 85,
@@ -249,6 +260,53 @@ const goals = {
 		// vitamin_c_mg: 90,
 	},
 	12: {
+		//SMA 1
+		energi_kkal: 2650,
+		protein_g: 75,
+		lemak_g: 85,
+		karbohidrat_g: 400,
+		serat_g: 37,
+		// abu_g: 5, // optional, tidak tercantum di AKG resmi
+		// kalsium_mg: 1200,
+		// fosfor_mg: 1250,
+		// besi_mg: 9,
+		// natrium_mg: 1700,
+		// kalium_mg: 5300,
+		// tembaga_mg: 890,
+		// seng_mg: 11,
+		// retinol_mcg: 500,
+		// b_kar_mcg: 3600,
+		// karoten_total_mcg: 4000,
+		// thiamin_mg: 1.2,
+		// riboflavin_mg: 1.3,
+		// niasin_mg: 16,
+		// vitamin_c_mg: 90,
+	},
+	13: {
+		//SMA 2
+		energi_kkal: 2650,
+		protein_g: 75,
+		lemak_g: 85,
+		karbohidrat_g: 400,
+		serat_g: 37,
+		// abu_g: 5, // optional, tidak tercantum di AKG resmi
+		// kalsium_mg: 1200,
+		// fosfor_mg: 1250,
+		// besi_mg: 9,
+		// natrium_mg: 1700,
+		// kalium_mg: 5300,
+		// tembaga_mg: 890,
+		// seng_mg: 11,
+		// retinol_mcg: 500,
+		// b_kar_mcg: 3600,
+		// karoten_total_mcg: 4000,
+		// thiamin_mg: 1.2,
+		// riboflavin_mg: 1.3,
+		// niasin_mg: 16,
+		// vitamin_c_mg: 90,
+	},
+	14: {
+		//SMA 3
 		energi_kkal: 2650,
 		protein_g: 65,
 		lemak_g: 75,
@@ -335,7 +393,6 @@ function buildModel(foods, current, goal) {
 
 		const diff = target[nutrient] - current[nutrient];
 		const maxDiff = goal[nutrient] - current[nutrient];
-		console.log(diff);
 		// kalau masih kurang pakai diff buat batas bawah dan target_nutrisi_harian/3 untuk batas atasnya
 		if (diff > 0) {
 			model.constraints[nutrient] = {
@@ -378,8 +435,6 @@ function getRecommendation(
 	const selectedGoal = goals[classGrade];
 	const model = buildModel(dividedFoods, currentNutrition, selectedGoal);
 	const results = solver.Solve(model);
-	console.log(results);
-	console.log(model);
 	const target = {};
 	for (const [nutrient, goalVal] of Object.entries(selectedGoal)) {
 		target[nutrient] = goalVal / 3;
@@ -405,7 +460,7 @@ function getRecommendation(
 	// Step 3: Compute nutritionDifference (only show positive deficits)
 	const nutritionDifference = {};
 	for (const [key, goalVal] of Object.entries(target)) {
-		const currentVal = optimizedNutrition[key] || 0;
+		const currentVal = currentNutrition[key] || 0;
 		const diff = goalVal - currentVal;
 		nutritionDifference[key] = diff > 0 ? parseFloat(diff.toFixed(2)) : 0;
 	}
@@ -416,7 +471,7 @@ function getRecommendation(
 			// Asumsi 1 unit LP solver = 100g, jadi kita kalikan jumlahPorsi * 100
 			// Jika 1 unit LP solver adalah 1 porsi, ganti 100 dengan berat 1 porsi (misal 50)
 			// gramasi: parseFloat((jumlahPorsi * 100).toFixed(1)),
-			gramasi: parseFloat(jumlahPorsi.toFixed(2)),
+			serving: parseFloat(jumlahPorsi.toFixed(2)),
 		}));
 
 	// 2. Format Kekurangan (nutritionDifference) -> { kekurangan: [...] }
@@ -447,7 +502,6 @@ function getRecommendation(
 
 	// Gabungkan semua defisit menjadi satu string
 	const defisitString = defisitList.join(", ");
-
 	// Format akhir yang diharapkan oleh RecommendationCard.js
 	const kekurangan =
 		defisitString.length > 0
@@ -460,6 +514,46 @@ function getRecommendation(
 	};
 }
 
+function getAllRecommendation(currentFoods, currentNutrition, servingSize = 1) {
+	const allResults = [];
+
+	for (const [classGrade, goalData] of Object.entries(goals)) {
+		const result = getRecommendation(
+			currentFoods,
+			currentNutrition,
+			servingSize,
+			parseInt(classGrade),
+		);
+
+		// Add context (which class grade this result belongs to)
+		allResults.push({
+			classGrade: parseInt(classGrade),
+			...result,
+		});
+	}
+
+	// Combine all saran & kekurangan into one list
+	const combinedSaran = allResults.flatMap((r) =>
+		r.saran.map((item) => ({
+			kelas: r.classGrade,
+			...item,
+		})),
+	);
+
+	const combinedKekurangan = allResults.flatMap((r) =>
+		r.kekurangan.map((item) => ({
+			kelas: r.classGrade,
+			...item,
+		})),
+	);
+
+	return {
+		combinedSaran,
+		combinedKekurangan,
+	};
+}
+
 module.exports = {
 	getRecommendation,
+	getAllRecommendation,
 };
