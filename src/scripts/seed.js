@@ -35,49 +35,49 @@ const stillMissing = [
 ];
 
 const bahanAliasMapping = {
-  "ayam": "ayam, daging, segar",
+  ayam: "ayam, daging, segar",
   "ayam filet": "ayam, daging, segar",
   "ayam fillet": "ayam, daging, segar",
   "ayam paha fillet": "ayam, daging, segar",
   "ayam patties": "ayam, daging, segar",
-  "bandeng": "ikan bandeng, segar",
+  bandeng: "ikan bandeng, segar",
   "bawang goreng": "bawang merah, segar",
   "bawang merah": "bawang merah, segar",
   "bawang putih": "bawang putih, segar",
   "bawang putih bubuk": "bawang putih, segar",
   "blue band": "margarin",
-  "daging": "sapi, daging, kornet",
+  daging: "sapi, daging, kornet",
   "daun bawang": "daun bawang merah, segar",
   "daun salam": "daun salam, bubuk",
-  "dori": "ikan patin, segar",
-  "gula": "gula putih",
+  dori: "ikan patin, segar",
+  gula: "gula putih",
   "gula merah": "gula aren",
   "gula pasir": "gula putih",
   "ikan bandeng": "ikan bandeng, segar",
   "ikan dori": "ikan patin, segar",
-  "jahe": "jahe, segar",
+  jahe: "jahe, segar",
   "kecap abc": "kecap",
   "kecap inggris": "kecap",
   "kecap manis": "kecap",
-  "kentang": "kentang, segar",
-  "ketumbar": "ketumbar, kering",
+  kentang: "kentang, segar",
+  ketumbar: "ketumbar, kering",
   "ketumbar bubuk": "ketumbar, kering",
-  "kunyit": "kunyit, segar",
+  kunyit: "kunyit, segar",
   "kunyit bubuk": "kunyit, segar",
-  "lengkuas": "boros laja (lengkuas), segar",
-  "margarine": "margarin",
-  "merica": "merica, kering",
-  "selada": "selada, segar",
-  "tahu": "tahu, mentah",
-  "tapioka": "tepung singkong/ tapioka",
-  "telor": "telur ayam ras, segar",
-  "telur": "telur ayam ras, segar",
-  "tempe": "tempe kedelai murni, mentah",
+  lengkuas: "boros laja (lengkuas), segar",
+  margarine: "margarin",
+  merica: "merica, kering",
+  selada: "selada, segar",
+  tahu: "tahu, mentah",
+  tapioka: "tepung singkong/ tapioka",
+  telor: "telur ayam ras, segar",
+  telur: "telur ayam ras, segar",
+  tempe: "tempe kedelai murni, mentah",
   "tepung s biru": "tepung terigu",
   "tepung tapioka": "tepung singkong/ tapioka",
-  "timun": "ketimun, segar",
-  "tomat": "tomat merah, segar",
-  "wijen": "wijen, mentah",
+  timun: "ketimun, segar",
+  tomat: "tomat merah, segar",
+  wijen: "wijen, mentah",
 };
 function cleanString(str) {
   if (typeof str !== "string") return "";
@@ -222,15 +222,15 @@ async function seedBahan() {
 
 // --- FUNGSI DENGAN PERBAIKAN: MENAMBAHKAN 'return allMenus' ---
 async function seedMenu() {
-  console.log("🍽️ Tahap 2: Membaca daftar menu utama...");
+  console.log("🍽 Tahap 2: Membaca daftar menu utama...");
   const allMenus = [];
   const filePath = path.join(__dirname, "../data/csv/menu.csv");
   const records = await processCsv(filePath, { headers: false, skipLines: 1 });
   const kategoriMapping = {
-    Karbohidrat: "karbohidrat",
-    "Protein hewani": "proteinHewani",
+    Karbohidrat: "karbohidrat", // bukan "karbo"
+    "Protein hewani": "proteinHewani", // bukan "lauk"
     Sayuran: "sayur",
-    "Protein tambahan": "proteinTambahan",
+    "Protein tambahan": "proteinTambahan", // bukan "side_dish"
     Buah: "buah",
   };
   for (const row of records) {
@@ -308,6 +308,59 @@ async function seedResep() {
   return successfullyLinkedMenus;
 }
 
+async function parseDataNutrisurvey() {
+  const records = [];
+  const filePath = path.join(__dirname, `../data/csv/nutrisurvey.csv`);
+  // Wrap stream in a Promise so we can await it
+  await new Promise((resolve, reject) => {
+    fs.createReadStream(filePath)
+      .pipe(csv({})) // Use ";" if your CSV uses semicolon
+      .on("data", (row) => {
+        const bahanData = {
+          nama: row.nama || row["nama.1"],
+          energi_kkal: parseFloat(row.energi_kkal) || 0,
+          protein_g: parseFloat(row.protein_g) || 0,
+          lemak_g: parseFloat(row.lemak_g) || 0,
+          karbohidrat_g: parseFloat(row.karbohidrat_g) || 0,
+          serat_g: parseFloat(row.serat_g) || 0,
+          abu_g: parseFloat(row.abu_g) || 0,
+          kalsium_mg: parseFloat(row.kalsium_mg) || 0,
+          fosfor_mg: parseFloat(row.fosfor_mg) || 0,
+          besi_mg: parseFloat(row.besi_mg) || 0,
+          natrium_mg: parseFloat(row.natrium_mg) || 0,
+          kalium_mg: parseFloat(row.kalium_mg) || 0,
+          tembaga_mg: parseFloat(row.tembaga_mg) || 0,
+          seng_mg: parseFloat(row.seng_mg) || 0,
+          retinol_mcg: parseFloat(row.retinol_mcg) || 0,
+          b_kar_mcg: parseFloat(row.b_kar_mcg) || 0,
+          karoten_total_mcg: parseFloat(row.karoten_total_mcg) || 0,
+          thiamin_mg: parseFloat(row.thiamin_mg) || 0,
+          riboflavin_mg: parseFloat(row.riboflavin_mg) || 0,
+          niasin_mg: parseFloat(row.niasin_mg) || 0,
+          vitamin_c_mg: parseFloat(row.vitamin_c_mg) || 0,
+          isValidated: row.isValidated === "true" || false,
+          validatedBy: row.validatedBy || "",
+        };
+        records.push(bahanData);
+      })
+      .on("end", resolve)
+      .on("error", reject);
+  });
+
+  // Upsert each row to avoid duplicates
+  for (const row of records) {
+    console.log(row);
+    if (!row.nama || row.nama.trim() === "") continue; // skip invalid rows
+    await prisma.bahan.upsert({
+      where: { nama: row.nama },
+      update: row, // update existing record
+      create: row, // create new record if not exists
+    });
+  }
+
+  console.log(`Processed ${records.length} rows from CSV.`);
+}
+
 async function main() {
   console.log("--- MENGHAPUS DATA LAMA ---");
   await prisma.resep.deleteMany({});
@@ -317,7 +370,7 @@ async function main() {
   await seedBahan();
   const allMenusInDb = await seedMenu();
   const linkedMenus = await seedResep();
-
+  await parseDataNutrisurvey();
   console.log("\n\n--- LAPORAN HASIL SEEDING ---");
   console.log(
     `✅ Total menu di daftar utama (menu.csv): ${allMenusInDb.length}`
