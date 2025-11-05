@@ -675,17 +675,76 @@ async function editIngredientsNutritions(req, res) {
   }
 }
 
+// async function getIngredients(req, res) {
+//   try {
+//     const name = (req && req.body && req.body.name) || req.query.name;
+//     if (!name) {
+//       return res.status(400).json({ error: "Missing `name` in body or query" });
+//     }
+//     const result = await estimateIngredientWithLLM(name);
+//     return res.json(result);
+//   } catch (err) {
+//     console.error("Error in getIngredients:", err);
+//     return res.status(500).json({ error: String(err) });
+//   }
+// }
+
+// Di ingredientController.js
+
 async function getIngredients(req, res) {
   try {
     const name = (req && req.body && req.body.name) || req.query.name;
     if (!name) {
-      return res.status(400).json({ error: "Missing `name` in body or query" });
+      return res.status(400).json({
+        success: false,
+        error: "Missing `name` in body or query",
+      });
     }
+
+    console.log(`🔍 [getIngredients] Processing: "${name}"`);
+
     const result = await estimateIngredientWithLLM(name);
-    return res.json(result);
+
+    console.log(`📊 [getIngredients] Result method: ${result.method}`);
+    console.log(
+      `📊 [getIngredients] Has predicted_composition: ${!!result.predicted_composition}`
+    );
+
+    // ✅ PERBAIKAN: Return format yang konsisten
+    if (result.predicted_composition) {
+      // Cari ingredient yang baru disimpan di database
+      const savedIngredient = await prisma.bahan.findFirst({
+        where: { nama: name.toLowerCase().trim() },
+        orderBy: { id: "desc" },
+      });
+
+      return res.status(200).json({
+        success: true, // ✅ TAMBAH FLAG SUCCESS
+        status: "success", // ✅ TAMBAH STATUS
+        ingredient_id: savedIngredient?.id || null, // ✅ ID BAHAN
+        id: savedIngredient?.id || null, // ✅ ALIAS
+        name: name,
+        method: result.method,
+        predicted_composition: result.predicted_composition,
+        candidates: result.candidates || [],
+        provenance: result.provenance || {},
+        confidence: result.confidence || 0.5,
+      });
+    } else {
+      // Tidak ada prediksi yang valid
+      return res.status(404).json({
+        success: false,
+        error: "Could not generate nutrition data for this ingredient",
+        name: name,
+        method: result.method || "none",
+      });
+    }
   } catch (err) {
-    console.error("Error in getIngredients:", err);
-    return res.status(500).json({ error: String(err) });
+    console.error("❌ [getIngredients] Error:", err);
+    return res.status(500).json({
+      success: false,
+      error: String(err.message || err),
+    });
   }
 }
 
