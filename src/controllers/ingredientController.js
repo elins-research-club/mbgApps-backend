@@ -566,14 +566,140 @@ async function getNotValidatedIngredients(req, res) {
   }
 }
 
+// async function editIngredientsNutritions(req, res) {
+//   try {
+//     const { id } = req.params;
+//     const { ingredientData } = req.body;
+
+//     const updates = ingredientData;
+
+//     // Validate that ID is provided
+//     if (!id) {
+//       return res.status(400).json({
+//         success: false,
+//         error: "Ingredient ID is required",
+//       });
+//     }
+
+//     // Remove id from updates
+//     delete updates.id;
+//     delete updates.isValidated;
+
+//     // Validate that at least one nutrient field is being updated
+//     const nutrientFields = NUTRIENTS.filter((nutrient) =>
+//       updates.hasOwnProperty(nutrient)
+//     );
+
+//     // We use < 0 in case the nutritions are already correct
+//     if (nutrientFields.length < 0) {
+//       return res.status(400).json({
+//         success: false,
+//         error: "At least one nutrient field must be provided for update",
+//       });
+//     }
+
+//     // Validate nutrient values are numbers
+//     for (const nutrient of nutrientFields) {
+//       const value = updates[nutrient];
+//       if (
+//         value !== null &&
+//         value !== undefined &&
+//         (isNaN(value) || value < 0)
+//       ) {
+//         return res.status(400).json({
+//           success: false,
+//           error: `Invalid value for ${nutrient}: must be a non-negative number or null`,
+//         });
+//       }
+//     }
+
+//     // Update the ingredient with new nutrition values and set isValidated to true
+//     const updatedIngredient = await prisma.bahan.update({
+//       where: {
+//         id: parseInt(id),
+//       },
+//       data: {
+//         ...updates,
+//         isValidated: true,
+//       },
+//       select: {
+//         id: true,
+//         nama: true,
+//         energi_kkal: true,
+//         protein_g: true,
+//         lemak_g: true,
+//         karbohidrat_g: true,
+//         serat_g: true,
+//         abu_g: true,
+//         kalsium_mg: true,
+//         fosfor_mg: true,
+//         besi_mg: true,
+//         natrium_mg: true,
+//         kalium_mg: true,
+//         tembaga_mg: true,
+//         seng_mg: true,
+//         retinol_mcg: true,
+//         b_kar_mcg: true,
+//         karoten_total_mcg: true,
+//         thiamin_mg: true,
+//         riboflavin_mg: true,
+//         niasin_mg: true,
+//         vitamin_c_mg: true,
+//         isValidated: true,
+//       },
+//     });
+
+//     console.log(
+//       `Updated and validated ingredient "${updatedIngredient.nama}" (ID: ${updatedIngredient.id})`
+//     );
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Ingredient nutrition values updated and validated successfully",
+//       ingredient: updatedIngredient,
+//     });
+//   } catch (error) {
+//     console.error("Error updating ingredient nutrition:", error);
+
+//     if (error.code === "P2025") {
+//       return res.status(404).json({
+//         success: false,
+//         error: "Ingredient not found",
+//       });
+//     }
+
+//     res.status(500).json({
+//       success: false,
+//       error: error.message,
+//     });
+//   }
+// }
+
+// async function getIngredients(req, res) {
+//   try {
+//     const name = (req && req.body && req.body.name) || req.query.name;
+//     if (!name) {
+//       return res.status(400).json({ error: "Missing `name` in body or query" });
+//     }
+//     const result = await estimateIngredientWithLLM(name);
+//     return res.json(result);
+//   } catch (err) {
+//     console.error("Error in getIngredients:", err);
+//     return res.status(500).json({ error: String(err) });
+//   }
+// }
+
+// Di ingredientController.js
+
+// Di ingredientController.js
+
 async function editIngredientsNutritions(req, res) {
   try {
     const { id } = req.params;
-    const { ingredientData } = req.body;
+    const { ingredientData, validatedBy } = req.body; // ✅ TAMBAH validatedBy
 
     const updates = ingredientData;
 
-    // Validate that ID is provided
     if (!id) {
       return res.status(400).json({
         success: false,
@@ -581,16 +707,21 @@ async function editIngredientsNutritions(req, res) {
       });
     }
 
-    // Remove id from updates
+    // ✅ VALIDASI: Pastikan validatedBy diisi
+    if (!validatedBy || validatedBy.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        error: "Nama ahli gizi (validatedBy) wajib diisi",
+      });
+    }
+
     delete updates.id;
     delete updates.isValidated;
 
-    // Validate that at least one nutrient field is being updated
     const nutrientFields = NUTRIENTS.filter((nutrient) =>
       updates.hasOwnProperty(nutrient)
     );
 
-    // We use < 0 in case the nutritions are already correct
     if (nutrientFields.length < 0) {
       return res.status(400).json({
         success: false,
@@ -598,7 +729,6 @@ async function editIngredientsNutritions(req, res) {
       });
     }
 
-    // Validate nutrient values are numbers
     for (const nutrient of nutrientFields) {
       const value = updates[nutrient];
       if (
@@ -613,7 +743,7 @@ async function editIngredientsNutritions(req, res) {
       }
     }
 
-    // Update the ingredient with new nutrition values and set isValidated to true
+    // ✅ UPDATE: Set isValidated = true DAN validatedBy
     const updatedIngredient = await prisma.bahan.update({
       where: {
         id: parseInt(id),
@@ -621,6 +751,7 @@ async function editIngredientsNutritions(req, res) {
       data: {
         ...updates,
         isValidated: true,
+        validatedBy: validatedBy.trim(), // ✅ SIMPAN NAMA AHLI GIZI
       },
       select: {
         id: true,
@@ -646,16 +777,17 @@ async function editIngredientsNutritions(req, res) {
         niasin_mg: true,
         vitamin_c_mg: true,
         isValidated: true,
+        validatedBy: true, // ✅ RETURN validatedBy
       },
     });
 
     console.log(
-      `Updated and validated ingredient "${updatedIngredient.nama}" (ID: ${updatedIngredient.id})`
+      `Updated and validated ingredient "${updatedIngredient.nama}" by ${validatedBy} (ID: ${updatedIngredient.id})`
     );
 
     res.status(200).json({
       success: true,
-      message: "Ingredient nutrition values updated and validated successfully",
+      message: `Ingredient berhasil divalidasi oleh ${validatedBy}`,
       ingredient: updatedIngredient,
     });
   } catch (error) {
@@ -674,22 +806,6 @@ async function editIngredientsNutritions(req, res) {
     });
   }
 }
-
-// async function getIngredients(req, res) {
-//   try {
-//     const name = (req && req.body && req.body.name) || req.query.name;
-//     if (!name) {
-//       return res.status(400).json({ error: "Missing `name` in body or query" });
-//     }
-//     const result = await estimateIngredientWithLLM(name);
-//     return res.json(result);
-//   } catch (err) {
-//     console.error("Error in getIngredients:", err);
-//     return res.status(500).json({ error: String(err) });
-//   }
-// }
-
-// Di ingredientController.js
 
 async function getIngredients(req, res) {
   try {
