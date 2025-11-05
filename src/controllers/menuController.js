@@ -1022,7 +1022,7 @@ async function saveMenuComposition(req, res) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create new composition menu with kategori "komposisiChef"
+      // 1. Create new composition menu
       const newMenu = await tx.menu.create({
         data: {
           nama: nama.toLowerCase().trim(),
@@ -1032,43 +1032,83 @@ async function saveMenuComposition(req, res) {
 
       console.log("✅ Menu baru dibuat:", newMenu);
 
-      // 2. Get all recipes from selected menus
+      // 2. Get all recipes from selected menus WITH source menu info
       const selectedMenuIds = validIds;
       const recipesToCopy = await tx.resep.findMany({
         where: {
           menu_id: { in: selectedMenuIds },
         },
-        select: {
-          bahan_id: true,
-          gramasi: true,
+        include: {
+          menu: { select: { id: true, nama: true, kategori: true } }, // ✅ INCLUDE source menu
         },
       });
 
-      console.log(`📋 Found ${recipesToCopy.length} recipes to copy`);
+      console.log(
+        `📋 Found ${recipesToCopy.length} recipes from ${selectedMenuIds.length} menus`
+      );
 
-      // 3. Copy all recipes to new menu
+      // 3. ✅ PERBAIKAN: Copy recipes WITH metadata about source
       if (recipesToCopy.length > 0) {
-        await tx.resep.createMany({
-          data: recipesToCopy.map((recipe) => ({
-            menu_id: newMenu.id,
+        // Group by source menu to preserve structure
+        const recipesBySource = {};
+
+        recipesToCopy.forEach((recipe) => {
+          const sourceMenuId = recipe.menu_id;
+          const sourceMenuName = recipe.menu.nama;
+          const sourceMenuKategori = recipe.menu.kategori;
+
+          if (!recipesBySource[sourceMenuId]) {
+            recipesBySource[sourceMenuId] = {
+              source_id: sourceMenuId,
+              source_name: sourceMenuName,
+              source_kategori: sourceMenuKategori,
+              recipes: [],
+            };
+          }
+
+          recipesBySource[sourceMenuId].recipes.push({
             bahan_id: recipe.bahan_id,
             gramasi: recipe.gramasi,
-          })),
+          });
         });
 
-        console.log(`✅ Copied ${recipesToCopy.length} recipes to new menu`);
+        // Create metadata tracking (simple approach: create comment or use existing structure)
+        for (const sourceId in recipesBySource) {
+          const sourceData = recipesBySource[sourceId];
+
+          console.log(
+            `  📦 Copying ${sourceData.recipes.length} recipes from "${sourceData.source_name}" (${sourceData.source_kategori})`
+          );
+
+          // Copy recipes (they will reference the composition menu, but we track source in query)
+          await tx.resep.createMany({
+            data: sourceData.recipes.map((recipe) => ({
+              menu_id: newMenu.id,
+              bahan_id: recipe.bahan_id,
+              gramasi: recipe.gramasi,
+            })),
+          });
+        }
+
+        console.log(
+          `✅ Total ${recipesToCopy.length} recipes copied to new menu`
+        );
       }
 
-      return newMenu;
+      return { newMenu, selectedMenuIds };
     });
 
-    console.log("✅ [Backend] Menu komposisi berhasil disimpan:", result);
+    console.log(
+      "✅ [Backend] Menu komposisi berhasil disimpan:",
+      result.newMenu
+    );
 
     return res.status(201).json({
       success: true,
       message: "Menu komposisi berhasil disimpan",
-      id: result.id,
-      nama: result.nama,
+      id: result.newMenu.id,
+      nama: result.newMenu.nama,
+      source_menus: result.selectedMenuIds, // ✅ Return source IDs
     });
   } catch (error) {
     console.error("❌ [Backend] Error saving composition:", error);
@@ -1101,6 +1141,7 @@ async function getMenuNutritionById(req, res) {
       });
     }
 
+    // 1. Get menu data
     const menu = await prisma.menu.findUnique({
       where: { id: parseInt(id) },
       select: { id: true, nama: true, kategori: true },
@@ -1115,11 +1156,11 @@ async function getMenuNutritionById(req, res) {
 
     console.log(`✅ Found menu: ${menu.nama} (${menu.kategori})`);
 
+    // 2. Get all recipes
     const recipes = await prisma.resep.findMany({
       where: { menu_id: parseInt(id) },
       include: {
         bahan: true,
-        menu: { select: { nama: true, kategori: true } },
       },
     });
 
@@ -1130,8 +1171,82 @@ async function getMenuNutritionById(req, res) {
       });
     }
 
-    console.log(`📦 Found ${recipes.length} recipes`);
+    // ✅ 3. DETEKSI SOURCE MENUS (UNTUK KOMPOSISI CHEF)
+    let sourceMenusMap = {}; // Map bahan_id ke source menu
 
+    if (menu.kategori === "komposisiChef") {
+      console.log("🔍 Detecting source menus for composition...");
+
+      // Get ingredient IDs dari komposisi ini
+      const compositionBahanIds = recipes.map((r) => r.bahan_id);
+
+      // Cari menu lain yang punya ingredient yang sama
+      const otherMenuRecipes = await prisma.resep.findMany({
+        where: {
+          bahan_id: { in: compositionBahanIds },
+          menu_id: { not: parseInt(id) }, // Exclude komposisi itu sendiri
+        },
+        include: {
+          menu: {
+            select: { id: true, nama: true, kategori: true },
+          },
+        },
+      });
+
+      // Group by menu untuk deteksi complete match
+      const menuIngredients = {};
+      otherMenuRecipes.forEach((recipe) => {
+        const menuId = recipe.menu_id;
+        if (!menuIngredients[menuId]) {
+          menuIngredients[menuId] = {
+            menu: recipe.menu,
+            ingredients: new Set(),
+          };
+        }
+        menuIngredients[menuId].ingredients.add(recipe.bahan_id);
+      });
+
+      // ✅ MAPPING: Untuk setiap bahan di komposisi, cari source menu yang lengkap
+      recipes.forEach((recipe) => {
+        const bahanId = recipe.bahan_id;
+
+        // Cari menu yang:
+        // 1. Punya bahan ini
+        // 2. Semua bahannya ada di komposisi (complete match)
+        for (const [menuId, data] of Object.entries(menuIngredients)) {
+          if (data.ingredients.has(bahanId)) {
+            // Check apakah semua ingredient dari menu ini ada di komposisi
+            const allIngredientsInComposition = Array.from(
+              data.ingredients
+            ).every((ingId) => compositionBahanIds.includes(ingId));
+
+            if (allIngredientsInComposition) {
+              sourceMenusMap[bahanId] = {
+                menu_id: parseInt(menuId),
+                nama: data.menu.nama,
+                kategori: data.menu.kategori,
+              };
+              break; // Found source, stop searching
+            }
+          }
+        }
+      });
+
+      console.log(
+        `✅ Detected ${
+          Object.keys(
+            recipes.reduce((acc, r) => {
+              if (sourceMenusMap[r.bahan_id]) {
+                acc[sourceMenusMap[r.bahan_id].menu_id] = true;
+              }
+              return acc;
+            }, {})
+          ).length
+        } source menus`
+      );
+    }
+
+    // 4. Calculate nutrition dengan tracking per source menu
     let totalGizi = {
       energi_kkal: 0,
       protein_g: 0,
@@ -1157,52 +1272,111 @@ async function getMenuNutritionById(req, res) {
 
     let totalGramasi = 0;
     const detailBahan = [];
-    const nutrisiPerResep = {};
+    const nutrisiPerSourceMenu = {}; // For recommendation
+    const groupedBySourceMenu = {}; // For DetailResultCard
+    const individualRecipes = {}; // ✅ For NutritionPerRecipeCard
 
     recipes.forEach((resep) => {
-      const { gramasi, bahan, menu: sourceMenu } = resep;
+      const { gramasi, bahan } = resep;
       if (!bahan) return;
 
       totalGramasi += gramasi;
       const ratio = gramasi / 100;
       const giziBahanIni = {};
 
-      const sourceMenuName = sourceMenu?.nama || "Unknown";
-      if (!nutrisiPerResep[sourceMenuName]) {
-        nutrisiPerResep[sourceMenuName] = { ...totalGizi };
+      // ✅ DETERMINE SOURCE MENU
+      let sourceMenuId, sourceMenuName, sourceMenuKategori;
+
+      if (menu.kategori === "komposisiChef" && sourceMenusMap[bahan.id]) {
+        // Untuk komposisi, gunakan detected source
+        sourceMenuId = sourceMenusMap[bahan.id].menu_id;
+        sourceMenuName = sourceMenusMap[bahan.id].nama;
+        sourceMenuKategori = sourceMenusMap[bahan.id].kategori;
+      } else {
+        // Untuk menu biasa, menu itu sendiri adalah source
+        sourceMenuId = menu.id;
+        sourceMenuName = menu.nama;
+        sourceMenuKategori = menu.kategori;
       }
 
+      // ✅ Initialize tracking per source menu
+      if (!individualRecipes[sourceMenuId]) {
+        individualRecipes[sourceMenuId] = {
+          menu_id: sourceMenuId,
+          nama_menu: sourceMenuName,
+          kategori: sourceMenuKategori,
+          total_gramasi: 0,
+          nutrisi: { ...totalGizi },
+          rincian_bahan: [], // ✅ TAMBAH untuk DetailResultCard
+        };
+      }
+
+      if (!nutrisiPerSourceMenu[sourceMenuName]) {
+        nutrisiPerSourceMenu[sourceMenuName] = { ...totalGizi };
+      }
+
+      if (!groupedBySourceMenu[sourceMenuName]) {
+        groupedBySourceMenu[sourceMenuName] = {
+          nama_menu: sourceMenuName,
+          kategori: sourceMenuKategori,
+          rincian_bahan: [],
+          total_gramasi: 0,
+        };
+      }
+
+      // Calculate nutrition
       for (const key in totalGizi) {
         if (bahan[key] !== null && bahan[key] !== undefined) {
           const nilaiGiziBahan = (bahan[key] || 0) * ratio;
           totalGizi[key] += nilaiGiziBahan;
           giziBahanIni[key] = parseFloat(nilaiGiziBahan.toFixed(2));
-          nutrisiPerResep[sourceMenuName][key] += nilaiGiziBahan;
+
+          individualRecipes[sourceMenuId].nutrisi[key] += nilaiGiziBahan;
+          nutrisiPerSourceMenu[sourceMenuName][key] += nilaiGiziBahan;
         }
       }
 
-      detailBahan.push({
+      individualRecipes[sourceMenuId].total_gramasi += gramasi;
+
+      const bahanDetail = {
         nama: bahan.nama,
         gramasi: gramasi,
         isValidated: bahan.isValidated,
         validatedBy: bahan.validatedBy,
         gizi: giziBahanIni,
-      });
+      };
+
+      detailBahan.push(bahanDetail);
+      individualRecipes[sourceMenuId].rincian_bahan.push(bahanDetail);
+      groupedBySourceMenu[sourceMenuName].rincian_bahan.push(bahanDetail);
+      groupedBySourceMenu[sourceMenuName].total_gramasi += gramasi;
     });
 
+    // Round all values
     for (const key in totalGizi) {
       totalGizi[key] = parseFloat(totalGizi[key].toFixed(2));
     }
 
-    for (const menuName in nutrisiPerResep) {
-      for (const key in nutrisiPerResep[menuName]) {
-        nutrisiPerResep[menuName][key] = parseFloat(
-          nutrisiPerResep[menuName][key].toFixed(2)
+    for (const menuName in nutrisiPerSourceMenu) {
+      for (const key in nutrisiPerSourceMenu[menuName]) {
+        nutrisiPerSourceMenu[menuName][key] = parseFloat(
+          nutrisiPerSourceMenu[menuName][key].toFixed(2)
+        );
+      }
+    }
+
+    for (const menuId in individualRecipes) {
+      for (const key in individualRecipes[menuId].nutrisi) {
+        individualRecipes[menuId].nutrisi[key] = parseFloat(
+          individualRecipes[menuId].nutrisi[key].toFixed(2)
         );
       }
     }
 
     console.log(`\n📊 Total: ${totalGramasi}g, ${totalGizi.energi_kkal} kkal`);
+    console.log(
+      `📋 Unique source menus: ${Object.keys(individualRecipes).length}`
+    );
 
     const calculateAkg = (value, dailyValue) => {
       if (!dailyValue || !value) return "0%";
@@ -1211,17 +1385,26 @@ async function getMenuNutritionById(req, res) {
       return `${Math.round(percentage)}%`;
     };
 
-    console.log("\n[REKOMENDASI] Memanggil sistem rekomendasi...");
-    const targetValue = target ? parseInt(target) : 1;
+    const getCategoryLabel = (kategori) => {
+      const labels = {
+        karbohidrat: "Karbohidrat",
+        proteinHewani: "Protein Hewani",
+        sayur: "Sayur",
+        proteinTambahan: "Protein Tambahan",
+        buah: "Buah",
+        komposisiChef: "Komposisi Chef",
+      };
+      return labels[kategori] || kategori;
+    };
 
+    // Get recommendation
+    const targetValue = target ? parseInt(target) : 1;
     const rekomendasi = getRecommendation(
-      nutrisiPerResep,
+      nutrisiPerSourceMenu,
       totalGizi,
       1,
       targetValue
     );
-
-    console.log("[REKOMENDASI] Result:", JSON.stringify(rekomendasi, null, 2));
 
     const getClassName = (kelas) => {
       const map = {
@@ -1258,10 +1441,26 @@ async function getMenuNutritionById(req, res) {
         })) || [],
     };
 
-    const detailPerResep = Object.entries(nutrisiPerResep).map(
-      ([menuNama, gizi]) => ({
-        menu_nama: menuNama,
-        nutrisi: gizi,
+    // ✅ FORMAT detailPerResep untuk NutritionPerRecipeCard
+    const detailPerResep = Object.values(individualRecipes).map((recipe) => ({
+      menu_id: recipe.menu_id,
+      menu_nama: recipe.nama_menu,
+      nama_menu: recipe.nama_menu,
+      kategori: recipe.kategori,
+      kategori_label: getCategoryLabel(recipe.kategori),
+      gramasi: recipe.total_gramasi,
+      nutrisi: recipe.nutrisi,
+      rincian_bahan: recipe.rincian_bahan, // ✅ UNTUK DetailResultCard
+    }));
+
+    // ✅ FORMAT detailPerResepGrouped untuk DetailResultCard
+    const detailPerResepGrouped = Object.values(groupedBySourceMenu).map(
+      (group) => ({
+        nama_menu: group.nama_menu,
+        kategori: group.kategori,
+        kategori_label: getCategoryLabel(group.kategori),
+        total_gramasi: group.total_gramasi,
+        rincian_bahan: group.rincian_bahan,
       })
     );
 
@@ -1293,16 +1492,17 @@ async function getMenuNutritionById(req, res) {
       detailPerhitungan: {
         jumlah_bahan: recipes.length,
         rincian_per_bahan: detailBahan,
+        rincian_per_bahan_grouped: detailPerResepGrouped,
         log: [
           `Menu: ${menu.nama}`,
           `Kategori: ${menu.kategori}`,
           `Target: ${getClassName(targetValue)}`,
           `Total bahan: ${recipes.length}`,
-          `Total sumber menu: ${Object.keys(nutrisiPerResep).length}`,
+          `Resep sumber: ${Object.keys(individualRecipes).length}`,
         ],
       },
       rekomendasi: formattedRekomendasi,
-      detailPerResep: detailPerResep,
+      detailPerResep: detailPerResep, // ✅ Individual recipes
     };
 
     console.log(`✅ Nutrition calculation complete\n`);
@@ -1317,7 +1517,6 @@ async function getMenuNutritionById(req, res) {
     });
   }
 }
-
 // =================================================================
 // EXPORTS
 // =================================================================
