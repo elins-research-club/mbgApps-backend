@@ -110,70 +110,23 @@ const getMenus = async (req, res) => {
 // =================================================================
 const generateNutrition = async (req, res) => {
   try {
-    const { karbo_id, lauk_id, sayur_id, side_dish_id, buah_id, target } =
-      req.body;
-
-    const selectedIds = [karbo_id, lauk_id, sayur_id, side_dish_id, buah_id]
-      .filter((id) => id !== null && id !== undefined)
-      .map((id) => parseInt(id));
-
+	// Request body: { bahan: [ { bahan_id: 123, gramasi: 100 }, { bahan_id: "nasi putih", gramasi: 150 }]}
+    const bahanInputs = Array.isArray(req.body?.bahan) ? req.body.bahan : [];
     console.log(`\n--- MEMULAI KALKULASI GIZI ---`);
-    console.log(`[DETEKTOR 1] Menerima ID Menu:`, selectedIds);
 
-    if (selectedIds.length === 0)
+    if (bahanInputs.length === 0)
       return res.status(400).json({ message: "Tidak ada menu yang dipilih." });
 
-    const selectedMenus = await prisma.menu.findMany({
-      where: { id: { in: selectedIds } },
-      select: { id: true, nama: true, kategori: true },
-    });
+    const ids = bahanInputs
+      .filter((b) => b.bahan_id != null)
+      .map((b) => parseInt(b.bahan_id));
 
-    const recipes = await prisma.resep.findMany({
-      where: { menu_id: { in: selectedIds } },
-      include: {
-        bahan: true,
-        menu: { select: { nama: true, kategori: true } },
-      },
-    });
+    const dbById = ids.length
+      ? await prisma.bahan.findMany({ where: { id: { in: ids } } })
+      : [];
 
-    console.log(
-      `[DETEKTOR 2] Menemukan ${recipes.length} bahan resep di database.`
-    );
-
-    const menuAnalysis = [];
-    for (const menu of selectedMenus) {
-      const menuRecipes = recipes.filter((r) => r.menu_id === menu.id);
-      const availableIngredients = menuRecipes.map((r) => ({
-        nama: r.bahan.nama,
-        gramasi: r.gramasi,
-      }));
-
-      menuAnalysis.push({
-        menu_nama: menu.nama,
-        kategori: menu.kategori,
-        jumlah_bahan_tersedia: menuRecipes.length,
-        bahan_tersedia: availableIngredients,
-      });
-
-      console.log(`\n[TRANSPARANSI] Menu: "${menu.nama}" (${menu.kategori})`);
-      console.log(`  └─ Bahan tersedia di DB: ${menuRecipes.length} item`);
-      if (menuRecipes.length === 0) {
-        console.log(`      PERINGATAN: Menu ini tidak memiliki resep!`);
-      } else {
-        availableIngredients.forEach((b, idx) => {
-          console.log(`     ${idx + 1}. ${b.nama} (${b.gramasi}g)`);
-        });
-      }
-    }
-
-    if (recipes.length === 0) {
-      console.error("\n❌ KESALAHAN KRITIS: Tidak ada resep yang ditemukan!");
-      return res.status(404).json({
-        message: "Tidak ada resep yang ditemukan untuk menu yang dipilih.",
-        detail: "Pastikan menu sudah memiliki resep di database.",
-        menu_dipilih: selectedMenus.map((m) => m.nama),
-      });
-    }
+    const bahanMapById = new Map(dbById.map((b) => [b.id, b]));
+    const allBahan = await prisma.bahan.findMany({ select: { id: true, nama: true } });
 
     let totalGizi = {
       energi_kkal: 0,
@@ -200,39 +153,51 @@ const generateNutrition = async (req, res) => {
 
     let totalGramasi = 0;
     const detailBahan = [];
-    const nutrisiPerResep = {};
 
-    recipes.forEach((resep) => {
-      const { gramasi, bahan, menu } = resep;
-      if (!bahan) return;
-
+	for (const input of bahanInputs) {
+      const gramasi = Number(input.gramasi) || 0;
       totalGramasi += gramasi;
-      const ratio = gramasi / 100;
-      const giziBahanIni = {};
 
-      if (!nutrisiPerResep[menu.nama]) {
-        nutrisiPerResep[menu.nama] = {};
+      let bahanRow = null;
+      if (input.bahan_id != null) {
+        bahanRow = bahanMapById.get(parseInt(input.bahan_id));
       }
-
-      for (const key in totalGizi) {
-        if (bahan[key] !== null && bahan[key] !== undefined) {
-          const nilaiGiziBahan = (bahan[key] || 0) * ratio;
-          totalGizi[key] += nilaiGiziBahan;
-          giziBahanIni[key] = parseFloat(nilaiGiziBahan.toFixed(2));
-
-          if (!nutrisiPerResep[menu.nama][key]) {
-            nutrisiPerResep[menu.nama][key] = 0;
+      if (!bahanRow && input.nama) {
+        const nameClean = String(input.nama).toLowerCase().trim();
+        bahanRow = await prisma.bahan.findFirst({ where: { nama: nameClean } });
+        if (!bahanRow) {
+          const candidate = allBahan.find((b) =>
+            String(b.nama).toLowerCase().includes(nameClean)
+          );
+          if (candidate) {
+            bahanRow = await prisma.bahan.findUnique({ where: { id: candidate.id } });
           }
-          nutrisiPerResep[menu.nama][key] += nilaiGiziBahan;
         }
       }
 
+      if (!bahanRow) {
+        missingBahan.push({ input, reason: "not_found_in_db" });
+        console.warn(`⚠️ Bahan tidak ditemukan:`, input);
+        continue;
+      }
+
+      const ratio = gramasi / 100;
+      const giziBahanIni = {};
+
+      for (const key in totalGizi) {
+        const val = bahanRow[key] != null ? Number(bahanRow[key]) : 0;
+        const added = val * ratio;
+        totalGizi[key] += added;
+        giziBahanIni[key] = parseFloat(added.toFixed(2));
+      }
+
       detailBahan.push({
-        nama: bahan.nama,
-        gramasi: gramasi,
+        id: bahanRow.id,
+        nama: bahanRow.nama,
+        gramasi,
         gizi: giziBahanIni,
       });
-    });
+    };
 
     console.log(`\n[DETEKTOR 3] Total gramasi: ${totalGramasi}g`);
     console.log(
@@ -249,14 +214,9 @@ const generateNutrition = async (req, res) => {
       return `${Math.round(percentage)}%`;
     };
 
-    console.log("\n[REKOMENDASI] Memanggil sistem rekomendasi...");
-    console.log(
-      "[REKOMENDASI] nutrisiPerResep keys:",
-      Object.keys(nutrisiPerResep)
-    );
     console.log("[REKOMENDASI] totalGizi:", totalGizi);
-
-    const rekomendasi = getAllRecommendation(nutrisiPerResep, totalGizi, 1);
+	console.log("[Detail Bahan] detail bahan: ", detailBahan)
+    const rekomendasi = getAllRecommendation(detailBahan, totalGizi, 1);
 
     console.log(
       "[REKOMENDASI] Result combinedSaran:",
