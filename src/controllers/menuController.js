@@ -869,7 +869,8 @@ async function getRecipeNutritionById(req, res) {
 		};
 
 		let totalGramasi = 0;
-		const detailBahan = {};
+    const detailBahan = [];
+		const detailBahanForLp = {};
 
 		recipes.forEach((resep) => {
 			const { gramasi, bahan } = resep;
@@ -888,12 +889,18 @@ async function getRecipeNutritionById(req, res) {
 			}
 
 			detailBahan.push({
+        id: bahan.id,
 				nama: bahan.nama,
 				gramasi: gramasi,
 				isValidated: bahan.isValidated,
 				validatedBy: bahan.validatedBy,
 				gizi: giziBahanIni,
 			});
+
+      detailBahanForLp[bahan.nama] = {
+				gramasi: gramasi,
+				...giziBahanIni,
+			}
 
 			console.log(
 				`  - ${bahan.nama}: ${gramasi}g (${(bahan.energi_kkal * ratio).toFixed(
@@ -915,6 +922,8 @@ async function getRecipeNutritionById(req, res) {
 			return `${Math.round(percentage)}%`;
 		};
 
+    const rekomendasi = getAllRecommendation(detailBahanForLp, totalGizi, 1);
+    console.log("REKOMENDASI FROM RECIPE ", rekomendasi)
 		const response = {
 			success: true,
 			menu: {
@@ -944,6 +953,7 @@ async function getRecipeNutritionById(req, res) {
 				jumlah_bahan: recipes.length,
 				rincian_per_bahan: detailBahan,
 			},
+      rekomendasi: rekomendasi,
 		};
 
 		console.log(`✅ Nutrition calculation complete\n`);
