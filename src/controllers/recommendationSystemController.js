@@ -401,7 +401,7 @@ function buildModel(foods, current, goal) {
 	for (const [nutrient, goalVal] of Object.entries(goal)) {
 		target[nutrient] = goalVal / 3;
 	}
-	
+
 	// Add foods
 	for (const [foodName, foodValue] of Object.entries(foods)) {
 		model.variables[foodName] = { obj: 0 };
@@ -421,7 +421,7 @@ function buildModel(foods, current, goal) {
 		// const maxDiff = goal[nutrient] - current[nutrient];
 
 		if (diff > 0) {
-			model.constraints[nutrient] = { min: diff, max: diff+100 };
+			model.constraints[nutrient] = { min: diff, max: diff + 100 };
 		}
 	}
 
@@ -458,7 +458,10 @@ function findUnrealisticFoods(contrib, current, goal) {
 	const issues = [];
 
 	for (const [nutrient, list] of Object.entries(contrib)) {
-		const totalNeeded = Math.max((goal[nutrient] ?? 0) / 3 - (current[nutrient] ?? 0), 0);
+		const totalNeeded = Math.max(
+			(goal[nutrient] ?? 0) / 3 - (current[nutrient] ?? 0),
+			0,
+		);
 		if (totalNeeded <= 0) continue;
 
 		const totalContrib = list.reduce((sum, x) => sum + x.value, 0);
@@ -474,7 +477,7 @@ function findUnrealisticFoods(contrib, current, goal) {
 					food: item.food,
 					amount: item.amount,
 					ratio,
-					missing: totalNeeded
+					missing: totalNeeded,
 				});
 			}
 		}
@@ -536,15 +539,13 @@ function findMissingFoodCategories(analysis) {
 	for (const item of analysis) {
 		if (item.missing > 10) {
 			if (!item.chosen_food) {
-				warnings.push(
-					`Missing foods rich in ${item.nutrient}.`
-				);
+				warnings.push(`Missing foods rich in ${item.nutrient}.`);
 				continue;
 			}
 
 			if (item.food_efficiency < 1) {
 				warnings.push(
-					`LP used ${item.chosen_food}, but it is LOW in ${item.nutrient}. Add better sources.`
+					`LP used ${item.chosen_food}, but it is LOW in ${item.nutrient}. Add better sources.`,
 				);
 			}
 		}
@@ -555,48 +556,51 @@ function findMissingFoodCategories(analysis) {
 // ------------------------------------------------------
 // NEW: Check for weird recommendation (Option B)
 // ------------------------------------------------------
-function checkWeirdRecommendation(saran, unrealisticFoodWarnings, threshold = 5) {
-    const weirdItems = [];
+function checkWeirdRecommendation(
+	saran,
+	unrealisticFoodWarnings,
+	threshold = 5,
+) {
+	const weirdItems = [];
 
-    // Build nutrient mapping: which food → nutrients causing unrealistic usage
-    const nutrientMap = {};
-    for (const uw of unrealisticFoodWarnings || []) {
-        if (!nutrientMap[uw.food]) nutrientMap[uw.food] = new Set();
-        nutrientMap[uw.food].add(uw.nutrient);
-    }
+	// Build nutrient mapping: which food → nutrients causing unrealistic usage
+	const nutrientMap = {};
+	for (const uw of unrealisticFoodWarnings || []) {
+		if (!nutrientMap[uw.food]) nutrientMap[uw.food] = new Set();
+		nutrientMap[uw.food].add(uw.nutrient);
+	}
 
-    // 1) servings above threshold
-    // for (const item of saran) {
-    //     if (item.serving != null && item.serving > threshold) {
-    //         weirdItems.push({
-    //             type: "large_serving",
-    //             nama: item.nama,
-    //             serving: item.serving,
-    //             nutrients: nutrientMap[item.nama] 
-    //                 ? Array.from(nutrientMap[item.nama]) 
-    //                 : [],
-    //             reason: `Serving ${item.serving} > ${threshold}`
-    //         });
-    //     }
-    // }
+	// 1) servings above threshold
+	// for (const item of saran) {
+	//     if (item.serving != null && item.serving > threshold) {
+	//         weirdItems.push({
+	//             type: "large_serving",
+	//             nama: item.nama,
+	//             serving: item.serving,
+	//             nutrients: nutrientMap[item.nama]
+	//                 ? Array.from(nutrientMap[item.nama])
+	//                 : [],
+	//             reason: `Serving ${item.serving} > ${threshold}`
+	//         });
+	//     }
+	// }
 
-    // 2) push unrealistic usage details
-    for (const uw of unrealisticFoodWarnings || []) {
+	// 2) push unrealistic usage details
+	for (const uw of unrealisticFoodWarnings || []) {
 		const nutrientName = NUTRIENT_LABELS[uw.nutrient] || uw.nutrient;
-        weirdItems.push({
-            type: "lp_unrealistic",
-            nutrient: uw.nutrient,
-            food: uw.food,
-            amount: uw.amount,
-            ratio: uw.ratio,
-            missing: uw.missing,
-            reason: `Sistem rekomendasi menggunakan "${uw.food}" untuk menutupi kekurangan ${nutrientName} secara berlebihan, hal ini dapat disebabkan karena menu kekurangan bahan tinggi ${nutrientName}. Anda bisa menambahkan makanan yang tinggi akan ${nutrientName}. Jika bahan dirasa sudah pas, maka anda dapat mengabaikan saran ini.`,
-        });
-    }
+		weirdItems.push({
+			type: "lp_unrealistic",
+			nutrient: uw.nutrient,
+			food: uw.food,
+			amount: uw.amount,
+			ratio: uw.ratio,
+			missing: uw.missing,
+			reason: `Sistem rekomendasi menggunakan "${uw.food}" untuk menutupi kekurangan ${nutrientName} secara berlebihan, hal ini dapat disebabkan karena menu kekurangan bahan tinggi ${nutrientName}. Anda bisa menambahkan makanan yang tinggi akan ${nutrientName}. Jika bahan dirasa sudah pas, maka anda dapat mengabaikan saran ini.`,
+		});
+	}
 
-    return { weird: weirdItems.length > 0, weirdItems };
+	return { weird: weirdItems.length > 0, weirdItems };
 }
-
 
 // ------------------------------------------------------
 // 5. Solve Recommendation
@@ -611,11 +615,20 @@ function getRecommendation(currentFoods, currentNutrition, classGrade = 1) {
 	// -----------------------------
 	// RUN ANALYZERS HERE
 	// -----------------------------
-	const lpAnalysis = analyzeLP(results, currentFoods, currentNutrition, selectedGoal);
+	const lpAnalysis = analyzeLP(
+		results,
+		currentFoods,
+		currentNutrition,
+		selectedGoal,
+	);
 	const missingFoodWarnings = findMissingFoodCategories(lpAnalysis);
 
 	const contrib = computeNutrientContributions(results, currentFoods);
-	const unrealisticFoodWarnings = findUnrealisticFoods(contrib, currentNutrition, selectedGoal);
+	const unrealisticFoodWarnings = findUnrealisticFoods(
+		contrib,
+		currentNutrition,
+		selectedGoal,
+	);
 
 	// -----------------------------
 	// BUILD TARGET VALUES
@@ -631,7 +644,7 @@ function getRecommendation(currentFoods, currentNutrition, classGrade = 1) {
 	const servingsToAdd = {};
 	for (const [food, amount] of Object.entries(results)) {
 		if (currentFoods[food] && amount > 1e-6) {
-			servingsToAdd[food] = parseFloat(amount.toFixed(2))*100; //makanan 100 gram
+			servingsToAdd[food] = parseFloat(amount.toFixed(2)) * 100; //makanan 100 gram
 		}
 	}
 
@@ -695,7 +708,11 @@ function getRecommendation(currentFoods, currentNutrition, classGrade = 1) {
 	// -----------------------------
 	// NEW: Check weird recommendations
 	// -----------------------------
-	const { weird, weirdItems } = checkWeirdRecommendation(saran, unrealisticFoodWarnings, 5);
+	const { weird, weirdItems } = checkWeirdRecommendation(
+		saran,
+		unrealisticFoodWarnings,
+		5,
+	);
 
 	return {
 		saran,
@@ -720,11 +737,7 @@ function getAllRecommendation(currentFoods, currentNutrition) {
 		const grade = parseInt(classGrade);
 
 		// === 1. Solve recommendation normally ===
-		const result = getRecommendation(
-			currentFoods,
-			currentNutrition,
-			grade
-		);
+		const result = getRecommendation(currentFoods, currentNutrition, grade);
 
 		// Add to result list
 		allResults.push({
@@ -740,41 +753,36 @@ function getAllRecommendation(currentFoods, currentNutrition) {
 		const contrib = computeNutrientContributions(solverResult, currentFoods);
 
 		// Detect unrealistic servings
-		const issues = findUnrealisticFoods(
-			contrib,
-			currentNutrition,
-			goalData
-		);
+		const issues = findUnrealisticFoods(contrib, currentNutrition, goalData);
 
 		// Analyze nutrient gaps + efficiency
 		const analysis = analyzeLP(
 			solverResult,
 			currentFoods,
 			currentNutrition,
-			goalData
+			goalData,
 		);
 
 		// High-severity warnings
 		const warnings = findMissingFoodCategories(analysis);
 
 		// Push results with class context
-		allIssues.push(...issues.map(i => ({ kelas: grade, ...i })));
-		allWarnings.push(...warnings.map(w => ({ kelas: grade, warning: w })));
+		allIssues.push(...issues.map((i) => ({ kelas: grade, ...i })));
+		allWarnings.push(...warnings.map((w) => ({ kelas: grade, warning: w })));
 
 		// Also push any per-grade weirdRecommendations
 		if (result.weirdRecommendation) {
-    allWarnings.push({
-        kelas: grade,
-        warning: "Unusually large servings detected.",
-        details: result.weirdDetails.map(w => ({
-            food: w.nama || w.food,
-            serving: w.serving,
-            nutrients: w.nutrients || [w.nutrient],
-            reason: w.reason
-        }))
-    });
-}
-
+			allWarnings.push({
+				kelas: grade,
+				warning: "Unusually large servings detected.",
+				details: result.weirdDetails.map((w) => ({
+					food: w.nama || w.food,
+					serving: w.serving,
+					nutrients: w.nutrients || [w.nutrient],
+					reason: w.reason,
+				})),
+			});
+		}
 	}
 
 	// === 3. Original merged outputs ===
@@ -782,14 +790,14 @@ function getAllRecommendation(currentFoods, currentNutrition) {
 		r.saran.map((item) => ({
 			kelas: r.classGrade,
 			...item,
-		}))
+		})),
 	);
 
 	const combinedKekurangan = allResults.flatMap((r) =>
 		r.kekurangan.map((item) => ({
 			kelas: r.classGrade,
 			...item,
-		}))
+		})),
 	);
 
 	// === 4. Add analysis output ===
@@ -797,7 +805,7 @@ function getAllRecommendation(currentFoods, currentNutrition) {
 		combinedSaran,
 		combinedKekurangan,
 		// issues: allIssues,       // <-- unrealistic servings
-		warnings: allWarnings,   // <-- missing high-X nutrient sources + weirdRecommendation
+		warnings: allWarnings, // <-- missing high-X nutrient sources + weirdRecommendation
 	};
 }
 
