@@ -533,6 +533,7 @@ const generateNutrition = async (req, res) => {
 			const giziBahanIni = {};
 
 			for (const key in totalGizi) {
+				console.log("key", key);
 				const val = bahanRow[key] != null ? Number(bahanRow[key]) : 0;
 				const added = val * ratio;
 				totalGizi[key] += added;
@@ -551,7 +552,8 @@ const generateNutrition = async (req, res) => {
 				...giziBahanIni,
 			};
 		}
-		console.log("detailbahanforlp", detailBahanForLp);
+
+		console.log("DETAIL BAHAN FOR LP", detailBahanForLp);
 		console.log(`\n[DETEKTOR 3] Total gramasi: ${totalGramasi}g`);
 		console.log(
 			`[DETEKTOR 3.1] Total energi: ${totalGizi.energi_kkal.toFixed(2)} kkal`,
