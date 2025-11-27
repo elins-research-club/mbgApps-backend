@@ -359,35 +359,37 @@ const goals = {
 // 4. Build goal programming model
 // ------------------------------
 
-// maybe still can be adjusted ?
+// ------------------------------
+// Weight map for goal programming
+// ------------------------------
 const WEIGHT_MAP = {
-	// Macros (very important, under:over ≈ 10:1)
-	energi_kkal: { under: 100, over: 2 },
-	protein_g: { under: 100, over: 2 },
+	// Energy: Moderate penalties - slight deficit OK, excess leads to weight gain
+	energi_kkal: { under: 3, over: 5 },
 
-	// Other macros (under:over ≈ 8:1)
-	karbohidrat_g: { under: 100, over: 2 },
-	lemak_g: { under: 100, over: 2 },
-	serat_g: { under: 100, over: 1.5 },
+	// Protein: HIGH penalty for under, low for over - critical for body function
+	// Most people struggle to get enough protein
+	protein_g: { under: 10, over: 1 },
 
-	// Important micros (under:over ≈ 6–8:1)
+	// Carbs: Moderate under penalty, higher over penalty - excess stored as fat
+	karbohidrat_g: { under: 2, over: 10 },
 
-	// kalsium_mg: { under: 10, over: 1.5 },
-	// besi_mg: { under: 12, over: 1.5 },
-	// vitamin_c_mg: { under: 8, over: 2 },
-	// retinol_mcg: { under: 10, over: 2 },
-	// B-vitamins and others (under:over ≈ 2:1)
-	// thiamin_mg: { under: 4, over: 2 },
-	// riboflavin_mg: { under: 4, over: 2 },
-	// niasin_mg: { under: 4, over: 2 },
+	// Fat: Balanced but prefer slight deficit - calorie dense
+	lemak_g: { under: 3, over: 6 },
 
-	// Fallback for unlisted nutrients
-	default: { under: 3, over: 1.5 },
+	// Fiber: HIGH penalty for under - most people don't get enough
+	// Can't really "over-consume" fiber from whole foods
+	serat_g: { under: 5, over: 1 },
+
+	// Micronutrients (if you add them later)
+	// vitamin_c: { under: 5, over: 1 },
+	// kalsium_mg: { under: 8, over: 2 },
+	// zat_besi_mg: { under: 10, over: 3 },
+
+	default: { under: 3, over: 2 },
 };
-
-// -------------------------------
-// buildModel (unchanged)
-// -------------------------------
+// ------------------------------
+// Build Goal Programming LP Model
+// ------------------------------
 function buildModel(foods, current, goal) {
 	const model = {
 		optimize: "obj",
@@ -396,46 +398,73 @@ function buildModel(foods, current, goal) {
 		variables: {},
 	};
 
-	// Define 1/3 target of full goal
+	// Target = 1/3 daily requirement
 	const target = {};
 	for (const [nutrient, goalVal] of Object.entries(goal)) {
 		target[nutrient] = goalVal / 3;
 	}
 
-	// Add foods
+	// --------------------------
+	// Add food variables
+	// --------------------------
 	for (const [foodName, foodValue] of Object.entries(foods)) {
-		model.variables[foodName] = { obj: 0 };
+		// Each food variable represents the amount (in grams) to add
+		model.variables[foodName] = {};
+
+		// Add nutrient coefficients for each food
 		for (const [key, val] of Object.entries(foodValue)) {
 			if (key === "gramasi") continue;
 			model.variables[foodName][key] = val;
 		}
+
+		// Non-negativity constraint (can't subtract food)
+		model.constraints[`${foodName}_bound`] = {
+			[foodName]: 1,
+			min: 0,
+		};
+
+		// Optional: add upper bound if you have max amounts
+		// model.constraints[`${foodName}_bound`].max = foodValue.gramasi || 1000;
 	}
 
-	// Build constraints
-	for (const [nutrient, goalVal] of Object.entries(goal)) {
+	// --------------------------
+	// Add deviation variables for each nutrient
+	// --------------------------
+	for (const [nutrient] of Object.entries(goal)) {
 		const w = WEIGHT_MAP[nutrient] ?? WEIGHT_MAP.default;
-		model.variables[`under_${nutrient}`] = { [nutrient]: -1, obj: w.under };
-		model.variables[`over_${nutrient}`] = { [nutrient]: 1, obj: w.over };
 
-		const diff = target[nutrient] - current[nutrient];
-		// const maxDiff = goal[nutrient] - current[nutrient];
+		// Under-achievement deviation (penalized more heavily)
+		model.variables[`under_${nutrient}`] = {
+			[nutrient]: -1,
+			obj: w.under,
+		};
 
-		if (diff > 0) {
-			model.constraints[nutrient] = { min: diff, max: diff + 100 };
-		}
+		// Over-achievement deviation (penalized less)
+		model.variables[`over_${nutrient}`] = {
+			[nutrient]: 1,
+			obj: w.over,
+		};
+
+		// Constraint: current + added foods = target + over_deviation - under_deviation
+		// Rearranged: added foods - over + under = target - current
+		const gap = target[nutrient] - (current[nutrient] ?? 0);
+
+		model.constraints[nutrient] = {
+			equal: gap,
+		};
 	}
 
 	return model;
 }
 
 // ------------------------------------------------------
-// 1. Compute each food's contribution for each nutrient
+// Compute each food's nutritional contribution
 // ------------------------------------------------------
 function computeNutrientContributions(result, foods) {
 	const contrib = {};
 
 	for (const [food, amount] of Object.entries(result)) {
-		if (!foods[food] || amount <= 1e-6) continue;
+		if (!foods[food]) continue;
 
 		for (const [nutrient, val] of Object.entries(foods[food])) {
 			if (nutrient === "gramasi") continue;
@@ -452,7 +481,7 @@ function computeNutrientContributions(result, foods) {
 }
 
 // ------------------------------------------------------
-// 2. Detect unrealistic food usage
+// Detect unrealistic food usage
 // ------------------------------------------------------
 function findUnrealisticFoods(contrib, current, goal) {
 	const issues = [];
@@ -465,25 +494,42 @@ function findUnrealisticFoods(contrib, current, goal) {
 		if (totalNeeded <= 0) continue;
 
 		const totalContrib = list.reduce((sum, x) => sum + x.value, 0);
-		if (totalContrib <= 0) continue;
 
-		for (const item of list) {
-			const ratio = item.value / totalContrib;
+		// If solver used too much of a food to cover a small deficit → suspicious
+		for (const entry of list) {
+			const ratio = entry.value / totalNeeded;
 
-			// suspicious if >80% of contribution and amount > 5 servings
-			if (ratio > 0.8 && item.amount > 5) {
+			if (ratio > 5) {
 				issues.push({
 					nutrient,
-					food: item.food,
-					amount: item.amount,
-					ratio,
-					missing: totalNeeded,
+					food: entry.food,
+					reason: `Food contributes ${ratio.toFixed(1)}× more than required.`,
 				});
 			}
 		}
+
+		// If total contribution is extremely higher than requirement
+		if (totalContrib > totalNeeded * 10) {
+			issues.push({
+				nutrient,
+				reason: `Total contribution for ${nutrient} is unrealistic (${totalContrib.toFixed(
+					1,
+				)} vs need ${totalNeeded.toFixed(1)}).`,
+			});
+		}
 	}
+
 	return issues;
 }
+
+// ------------------------------------------------------
+// Export functions
+// ------------------------------------------------------
+module.exports = {
+	buildModel,
+	computeNutrientContributions,
+	findUnrealisticFoods,
+};
 
 // ------------------------------------------------------
 // 3. LP Analyzer — best food per nutrient
@@ -607,10 +653,8 @@ function checkWeirdRecommendation(
 // ------------------------------------------------------
 function getRecommendation(currentFoods, currentNutrition, classGrade = 1) {
 	const selectedGoal = goals[classGrade];
-	console.log("classgrade", classGrade);
 	const model = buildModel(currentFoods, currentNutrition, selectedGoal);
 	const results = solver.Solve(model);
-	console.log(results);
 
 	// -----------------------------
 	// RUN ANALYZERS HERE
@@ -643,8 +687,9 @@ function getRecommendation(currentFoods, currentNutrition, classGrade = 1) {
 	// -----------------------------
 	const servingsToAdd = {};
 	for (const [food, amount] of Object.entries(results)) {
-		if (currentFoods[food] && amount > 1e-6) {
-			servingsToAdd[food] = parseFloat(amount.toFixed(2)) * 100; //makanan 100 gram
+		if (currentFoods[food]) {
+			servingsToAdd[food] =
+				parseFloat(amount.toFixed(2)) * currentFoods[food].gramasi; //makanan 100 gram
 		}
 	}
 
@@ -711,7 +756,7 @@ function getRecommendation(currentFoods, currentNutrition, classGrade = 1) {
 	const { weird, weirdItems } = checkWeirdRecommendation(
 		saran,
 		unrealisticFoodWarnings,
-		5,
+		3,
 	);
 
 	return {
@@ -728,6 +773,7 @@ function getRecommendation(currentFoods, currentNutrition, classGrade = 1) {
 // ------------------------------------------------------
 // 6. All Class Grades
 // ------------------------------------------------------
+
 function getAllRecommendation(currentFoods, currentNutrition) {
 	const allResults = [];
 	const allIssues = [];
@@ -736,56 +782,40 @@ function getAllRecommendation(currentFoods, currentNutrition) {
 	for (const [classGrade, goalData] of Object.entries(goals)) {
 		const grade = parseInt(classGrade);
 
-		// === 1. Solve recommendation normally ===
+		// === RUN ONCE ONLY ===
 		const result = getRecommendation(currentFoods, currentNutrition, grade);
-
-		// Add to result list
 		allResults.push({
 			classGrade: grade,
 			...result,
 		});
 
-		// === 2. ANALYSIS BLOCK (the part you were missing) ===
-		const model = buildModel(currentFoods, currentNutrition, goalData);
-		const solverResult = solver.Solve(model);
-
-		// Contribution analysis
-		const contrib = computeNutrientContributions(solverResult, currentFoods);
-
-		// Detect unrealistic servings
-		const issues = findUnrealisticFoods(contrib, currentNutrition, goalData);
-
-		// Analyze nutrient gaps + efficiency
-		const analysis = analyzeLP(
-			solverResult,
-			currentFoods,
-			currentNutrition,
-			goalData,
+		// === Reuse analysis from getRecommendation ===
+		allIssues.push(
+			...result.unrealisticFoodWarnings.map((i) => ({
+				kelas: grade,
+				...i,
+			})),
 		);
 
-		// High-severity warnings
-		const warnings = findMissingFoodCategories(analysis);
+		if (result.lpAnalysis?.missingCategories) {
+			allWarnings.push(
+				...result.lpAnalysis.missingCategories.map((w) => ({
+					kelas: grade,
+					warning: w,
+				})),
+			);
+		}
 
-		// Push results with class context
-		allIssues.push(...issues.map((i) => ({ kelas: grade, ...i })));
-		allWarnings.push(...warnings.map((w) => ({ kelas: grade, warning: w })));
-
-		// Also push any per-grade weirdRecommendations
 		if (result.weirdRecommendation) {
 			allWarnings.push({
 				kelas: grade,
 				warning: "Unusually large servings detected.",
-				details: result.weirdDetails.map((w) => ({
-					food: w.nama || w.food,
-					serving: w.serving,
-					nutrients: w.nutrients || [w.nutrient],
-					reason: w.reason,
-				})),
+				details: result.weirdDetails,
 			});
 		}
 	}
 
-	// === 3. Original merged outputs ===
+	// Merge results
 	const combinedSaran = allResults.flatMap((r) =>
 		r.saran.map((item) => ({
 			kelas: r.classGrade,
@@ -799,13 +829,13 @@ function getAllRecommendation(currentFoods, currentNutrition) {
 			...item,
 		})),
 	);
-
-	// === 4. Add analysis output ===
+	console.log("issues", allIssues);
+	console.log("warnings", allWarnings);
 	return {
 		combinedSaran,
 		combinedKekurangan,
-		// issues: allIssues,       // <-- unrealistic servings
-		warnings: allWarnings, // <-- missing high-X nutrient sources + weirdRecommendation
+		issues: allIssues,
+		warnings: allWarnings,
 	};
 }
 
