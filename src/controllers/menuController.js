@@ -547,10 +547,12 @@ const generateNutrition = async (req, res) => {
 				gizi: giziBahanIni,
 			});
 
-			detailBahanForLp[bahanRow.nama] = {
-				gramasi: gramasi,
-				...giziBahanIni,
-			};
+			if (!["Bumbu", "Gula"].includes(bahanRow.kelompok_makanan)){
+				detailBahanForLp[bahanRow.nama] = {
+					gramasi: gramasi,
+					...giziBahanIni,
+				};
+			}
 		}
 
 		console.log("DETAIL BAHAN FOR LP", detailBahanForLp);
@@ -1252,10 +1254,16 @@ async function getRecipeNutritionById(req, res) {
 				gizi: giziBahanIni,
 			});
 
-			detailBahanForLp[bahan.nama] = {
-				gramasi: gramasi,
-				...giziBahanIni,
-			};
+			// tandain
+			console.log("hi");
+			console.log("kelmakanan", bahan.kelompok_makanan);
+			console.log("debugging",["Bumbu", "Gula"].includes(bahan.kelompok_makanan));
+			if (!["Bumbu", "Gula"].includes(bahan.kelompok_makanan)){
+				detailBahanForLp[bahan.nama] = {
+					gramasi: gramasi,
+					...giziBahanIni,
+				};
+			}
 
 			console.log(
 				`  - ${bahan.nama}: ${gramasi}g (${(bahan.energi_kkal * ratio).toFixed(

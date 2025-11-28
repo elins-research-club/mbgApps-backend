@@ -115,6 +115,7 @@ async function seedBahan() {
 			skipLines: 1,
 		});
 		for (const row of records) {
+			console.log(row);
 			const namaBahan = cleanString(row["3"]); // Gunakan pembersih
 			if (!namaBahan) continue;
 			const parseValue = (value) =>
@@ -144,6 +145,7 @@ async function seedBahan() {
 					riboflavin_mg: parseValue(row["22"]),
 					niasin_mg: parseValue(row["23"]),
 					vitamin_c_mg: parseValue(row["24"]),
+					kelompok_makanan: row["26"],
 					isValidated: true,
 					validatedBy: "TKPI",
 				},
@@ -338,6 +340,7 @@ async function parseDataNutrisurvey() {
 					riboflavin_mg: parseFloat(row.riboflavin_mg) || 0,
 					niasin_mg: parseFloat(row.niasin_mg) || 0,
 					vitamin_c_mg: parseFloat(row.vitamin_c_mg) || 0,
+					kelompok_makanan: null,
 					isValidated: row.isValidated === "True" || false,
 					validatedBy: row.validatedBy || "",
 				};

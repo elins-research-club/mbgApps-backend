@@ -503,6 +503,9 @@ function findUnrealisticFoods(contrib, current, goal) {
 				issues.push({
 					nutrient,
 					food: entry.food,
+					amount: entry.amount,
+					ratio: ratio,
+					missing: totalNeeded,
 					reason: `Food contributes ${ratio.toFixed(1)}× more than required.`,
 				});
 			}
@@ -600,52 +603,40 @@ function findMissingFoodCategories(analysis) {
 }
 
 // ------------------------------------------------------
-// NEW: Check for weird recommendation (Option B)
+// Check for weird or excessive recommendations
 // ------------------------------------------------------
-function checkWeirdRecommendation(
-	saran,
-	unrealisticFoodWarnings,
-	threshold = 5,
-) {
+function checkWeirdRecommendation(saran, unrealisticFoodWarnings) {
 	const weirdItems = [];
+	const GRAM_THRESHOLD = 100;
 
-	// Build nutrient mapping: which food → nutrients causing unrealistic usage
-	const nutrientMap = {};
-	for (const uw of unrealisticFoodWarnings || []) {
-		if (!nutrientMap[uw.food]) nutrientMap[uw.food] = new Set();
-		nutrientMap[uw.food].add(uw.nutrient);
+	// Check for excessive servings (>100g)
+	for (const item of saran) {
+		if (item.serving != null && item.serving > GRAM_THRESHOLD) {
+			weirdItems.push({
+				type: "excessive_amount",
+				nama: item.nama,
+				serving: item.serving,
+				reason: `Porsi terlalu besar (${item.serving}g)`
+			});
+		}
 	}
 
-	// 1) servings above threshold
-	// for (const item of saran) {
-	//     if (item.serving != null && item.serving > threshold) {
-	//         weirdItems.push({
-	//             type: "large_serving",
-	//             nama: item.nama,
-	//             serving: item.serving,
-	//             nutrients: nutrientMap[item.nama]
-	//                 ? Array.from(nutrientMap[item.nama])
-	//                 : [],
-	//             reason: `Serving ${item.serving} > ${threshold}`
-	//         });
-	//     }
-	// }
-
-	// 2) push unrealistic usage details
+	// Check for unrealistic LP usage
 	for (const uw of unrealisticFoodWarnings || []) {
 		const nutrientName = NUTRIENT_LABELS[uw.nutrient] || uw.nutrient;
 		weirdItems.push({
-			type: "lp_unrealistic",
-			nutrient: uw.nutrient,
+			type: "unrealistic_usage",
 			food: uw.food,
+			nutrient: uw.nutrient,
 			amount: uw.amount,
-			ratio: uw.ratio,
-			missing: uw.missing,
-			reason: `Sistem rekomendasi menggunakan "${uw.food}" untuk menutupi kekurangan ${nutrientName} secara berlebihan, hal ini dapat disebabkan karena menu kekurangan bahan tinggi ${nutrientName}. Anda bisa menambahkan makanan yang tinggi akan ${nutrientName}. Jika bahan dirasa sudah pas, maka anda dapat mengabaikan saran ini.`,
+			reason: `${uw.food} berlebihan untuk ${nutrientName}`
 		});
 	}
 
-	return { weird: weirdItems.length > 0, weirdItems };
+	return { 
+		weird: weirdItems.length > 0, 
+		weirdItems 
+	};
 }
 
 // ------------------------------------------------------
