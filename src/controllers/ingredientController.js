@@ -277,7 +277,7 @@ async function estimateIngredientWithLLM(ingredientName) {
         const savedBahan = await prisma.bahan.create({
           data: {
             nama: ingredientName,
-            isValidated: false,
+            isValidated: true,
             validatedBy: "genus",
             ...nutritionFields,
           },
