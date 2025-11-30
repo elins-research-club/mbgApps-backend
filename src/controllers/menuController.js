@@ -11,6 +11,9 @@ const {
 	getRecommendation,
 	getAllRecommendation,
 } = require("./recommendationSystemController");
+const {
+	filterForLP
+} = require("./foodCategorization");
 
 // ------------------------------
 const goals = {
@@ -523,11 +526,11 @@ const generateNutrition = async (req, res) => {
 				}
 			}
 
-			// if (!bahanRow) {
-			// 	missingBahan.push({ input, reason: "not_found_in_db" });
-			// 	console.warn(`! Bahan tidak ditemukan:`, input);
-			// 	continue;
-			// }
+			if (!bahanRow) {
+				// missingBahan.push({ input, reason: "not_found_in_db" });
+				console.warn(`! Bahan tidak ditemukan:`, input);
+				continue;
+			}
 
 			const ratio = gramasi / 100;
 			const giziBahanIni = {};
@@ -545,16 +548,17 @@ const generateNutrition = async (req, res) => {
 				nama: bahanRow.nama,
 				gramasi,
 				gizi: giziBahanIni,
+				kategori_makanan: bahanRow.kategori_makanan,
 			});
 
 			if (!["Bumbu", "Gula"].includes(bahanRow.kelompok_makanan)){
 				detailBahanForLp[bahanRow.nama] = {
 					gramasi: gramasi,
+					kategori_makanan: bahanRow.kategori_makanan,
 					...giziBahanIni,
 				};
 			}
 		}
-
 		console.log("DETAIL BAHAN FOR LP", detailBahanForLp);
 		console.log(`\n[DETEKTOR 3] Total gramasi: ${totalGramasi}g`);
 		console.log(
@@ -573,7 +577,7 @@ const generateNutrition = async (req, res) => {
 
 		console.log("[REKOMENDASI] totalGizi:", totalGizi);
 		console.log("[Detail Bahan] detail bahan: ", detailBahan);
-		const rekomendasi = getAllRecommendation(detailBahanForLp, totalGizi, 1);
+		const rekomendasi = await getAllRecommendation(detailBahanForLp, totalGizi, 1);
 		console.log(rekomendasi);
 		console.log(
 			"[REKOMENDASI] Result combinedSaran:",
@@ -1252,6 +1256,7 @@ async function getRecipeNutritionById(req, res) {
 				isValidated: bahan.isValidated,
 				validatedBy: bahan.validatedBy,
 				gizi: giziBahanIni,
+				kategori_makanan: bahan.kategori_makanan,
 			});
 
 			// tandain
@@ -1261,6 +1266,7 @@ async function getRecipeNutritionById(req, res) {
 			if (!["Bumbu", "Gula"].includes(bahan.kelompok_makanan)){
 				detailBahanForLp[bahan.nama] = {
 					gramasi: gramasi,
+					kategori_makanan: bahan.kategori_makanan,
 					...giziBahanIni,
 				};
 			}
@@ -1271,6 +1277,7 @@ async function getRecipeNutritionById(req, res) {
 				)} kkal)`,
 			);
 		});
+
 
 		for (const key in totalGizi) {
 			totalGizi[key] = parseFloat(totalGizi[key].toFixed(2));
@@ -1285,7 +1292,7 @@ async function getRecipeNutritionById(req, res) {
 			return `${Math.round(percentage)}%`;
 		};
 
-		const rekomendasi = getAllRecommendation(detailBahanForLp, totalGizi, 1);
+		const rekomendasi = await getAllRecommendation(detailBahanForLp, totalGizi, 1);
 		console.log("REKOMENDASI FROM RECIPE ", rekomendasi);
 		const persenAkgAll = computeAkgAll(totalGizi);
 		console.log(
@@ -1747,7 +1754,7 @@ async function getMenuNutritionById(req, res) {
 
 		// Get recommendation
 		const targetValue = target ? parseInt(target) : 1;
-		const rekomendasi = getRecommendation(
+		const rekomendasi = await getRecommendation(
 			nutrisiPerSourceMenu,
 			totalGizi,
 			1,
