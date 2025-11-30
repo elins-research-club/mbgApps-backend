@@ -3,7 +3,7 @@ const path = require("path");
 const csv = require("csv-parser");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-
+const { determineCategory } = require("../controllers/foodCategorization");
 // KAMUS ALIAS BAHAN
 const stillMissing = [
 	"bakso",
@@ -146,6 +146,19 @@ async function seedBahan() {
 					niasin_mg: parseValue(row["23"]),
 					vitamin_c_mg: parseValue(row["24"]),
 					kelompok_makanan: row["26"],
+					kategori_makanan: determineCategory(namaBahan, {
+						gramasi: 100,
+						energi_kkal: parseValue(row["5"]),
+						protein_g: parseValue(row["6"]),
+						lemak_g: parseValue(row["7"]),
+						karbohidrat_g: parseValue(row["8"]),
+						serat_g: parseValue(row["9"]),
+						natrium_mg: parseValue(row["14"]),
+						kalsium_mg: parseValue(row["11"]),
+						besi_mg: parseValue(row["13"]),
+						vitamin_c_mg: parseValue(row["24"]),
+						retinol_mcg: parseValue(row["18"])
+					}),
 					isValidated: true,
 					validatedBy: "TKPI",
 				},
@@ -341,6 +354,19 @@ async function parseDataNutrisurvey() {
 					niasin_mg: parseFloat(row.niasin_mg) || 0,
 					vitamin_c_mg: parseFloat(row.vitamin_c_mg) || 0,
 					kelompok_makanan: null,
+					kategori_makanan: determineCategory(row.nama || row["nama.1"], {
+						gramasi: 100,
+						energi_kkal: parseFloat(row["5"]),
+						protein_g: parseFloat(row["6"]),
+						lemak_g: parseFloat(row["7"]),
+						karbohidrat_g: parseFloat(row["8"]),
+						serat_g: parseFloat(row["9"]),
+						natrium_mg: parseFloat(row["14"]),
+						kalsium_mg: parseFloat(row["11"]),
+						besi_mg: parseFloat(row["13"]),
+						vitamin_c_mg: parseFloat(row["24"]),
+						retinol_mcg: parseFloat(row["18"])
+					}),
 					isValidated: row.isValidated === "True" || false,
 					validatedBy: row.validatedBy || "",
 				};
@@ -352,7 +378,6 @@ async function parseDataNutrisurvey() {
 
 	// Upsert each row to avoid duplicates
 	for (const row of records) {
-		console.log(row);
 		if (!row.nama || row.nama.trim() === "") continue; // skip invalid rows
 		await prisma.bahan.upsert({
 			where: { nama: row.nama },
