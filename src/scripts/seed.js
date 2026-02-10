@@ -268,6 +268,114 @@ async function seedMenu() {
   return allMenus;
 }
 
+// Fungsi helper untuk menentukan kategori berdasarkan nama file resep
+function determineMenuCategory(recipeFileName) {
+  if (recipeFileName.includes("nasi-putih")) return "karbohidrat";
+  if (recipeFileName.includes("protein.csv")) return "proteinHewani";
+  if (recipeFileName.includes("sayuran")) return "sayur";
+  if (recipeFileName.includes("protein-tambahan")) return "proteinTambahan";
+  if (recipeFileName.includes("buahSusu")) return "buah";
+  return "karbohidrat"; 
+}
+
+async function seedMenuByBahan() {
+  console.log("🍽 Tahap 4: Membuat menu paket dari menu.csv...");
+  const filePath = path.join(__dirname, "../data/csv/menu.csv");
+  const records = await processCsv(filePath, { headers: false });
+
+  const menus = {}; 
+  let currentMenuHeaders = [];
+  let categoryIndex = 0;
+
+  for (const row of records) {
+    const values = Object.values(row);
+    const fullLine = values.join(",");
+
+    const hasMenuHeader = values.some(
+      (v) => typeof v === "string" && v.trim().match(/^MENU \d+$/)
+    );
+
+    if (hasMenuHeader) {
+      currentMenuHeaders = [];
+      for (let i = 0; i < values.length; i++) {
+        const val = (values[i] || "").trim();
+        if (val.match(/^MENU \d+$/)) {
+          const menuName = cleanString(val);
+          currentMenuHeaders.push({ colIndex: i, menuName });
+          if (!menus[menuName]) menus[menuName] = [];
+        }
+      }
+      categoryIndex = 0;
+      continue;
+    }
+
+    if (
+      fullLine.replace(/,/g, "").trim() === "" ||
+      fullLine.includes("SPESIFIKASI")
+    ) {
+      continue;
+    }
+
+    if (currentMenuHeaders.length > 0 && categoryIndex < 5) {
+      for (const { colIndex, menuName } of currentMenuHeaders) {
+        const recipeName = cleanString(row[String(colIndex)] || "");
+        if (recipeName) {
+          menus[menuName].push(recipeName);
+        }
+      }
+      categoryIndex++;
+    }
+  }
+
+  let totalMenusCreated = 0;
+  let totalBahanLinked = 0;
+
+  for (const [menuName, recipes] of Object.entries(menus)) {
+    const combinedMenu = await prisma.menu.upsert({
+      where: { nama: menuName },
+      update: { kategori: "paket" },
+      create: { nama: menuName, kategori: "paket" },
+    });
+    totalMenusCreated++;
+
+    console.log(`\n  📦 ${menuName}:`);
+
+    for (const recipeName of recipes) {
+      const recipeMenu = await prisma.menu.findUnique({
+        where: { nama: recipeName },
+      });
+
+      if (recipeMenu) {
+        const resepEntries = await prisma.resep.findMany({
+          where: { menu_id: recipeMenu.id },
+          include: { bahan: true },
+        });
+
+        for (const entry of resepEntries) {
+          await prisma.resep.create({
+            data: {
+              menu_id: combinedMenu.id,
+              bahan_id: entry.bahan_id,
+              gramasi: entry.gramasi,
+            },
+          });
+          totalBahanLinked++;
+        }
+        console.log(
+          `    ✓ ${recipeName}: ${resepEntries.length} bahan ditambahkan`
+        );
+      } else {
+        console.log(`    ⚠️  Resep tidak ditemukan di DB: ${recipeName}`);
+      }
+    }
+  }
+
+  console.log(
+    `\n✅ ${totalMenusCreated} menu paket dibuat, ${totalBahanLinked} total bahan terhubung.`
+  );
+  return Object.keys(menus);
+}
+
 async function seedResep() {
   console.log("🍳 Tahap 3: Membaca dan menghubungkan semua resep...");
   const recipeFiles = [
@@ -398,13 +506,18 @@ async function main() {
   await seedBahan();
   const allMenusInDb = await seedMenu();
   const linkedMenus = await seedResep();
+  const paketMenus = await seedMenuByBahan();
   await parseDataNutrisurvey();
+
   console.log("\n\n--- LAPORAN HASIL SEEDING ---");
   console.log(
-    `✅ Total menu di daftar utama (menu.csv): ${allMenusInDb.length}`,
+    `✅ Total menu individual (resep): ${allMenusInDb.length}`,
   );
   console.log(
-    `🔗 Total menu yang berhasil terhubung dengan resep: ${linkedMenus.size}`,
+    `🔗 Menu individual yang terhubung dengan bahan: ${linkedMenus.size}`,
+  );
+  console.log(
+    `📦 Total menu paket (MENU 1, MENU 2, ...): ${paketMenus.length}`,
   );
   const unlinkedMenus = allMenusInDb.filter((menu) => !linkedMenus.has(menu));
   if (unlinkedMenus.length > 0) {
