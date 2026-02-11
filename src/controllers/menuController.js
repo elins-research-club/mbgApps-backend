@@ -1876,6 +1876,306 @@ async function getMenuNutritionById(req, res) {
 	}
 }
 // =================================================================
+// BAGIAN 8: editMenu (Edit menu name, kategori, and resep)
+// =================================================================
+async function editMenu(req, res) {
+	try {
+		const { id } = req.params;
+		const { nama, kategori, resep } = req.body;
+
+		console.log(`📝 [Backend] Editing menu ID: ${id}`, { nama, kategori, resep });
+
+		if (!id || isNaN(parseInt(id))) {
+			return res.status(400).json({
+				success: false,
+				message: "ID menu tidak valid",
+			});
+		}
+
+		const menuId = parseInt(id);
+
+		// Check if menu exists
+		const existingMenu = await prisma.menu.findUnique({
+			where: { id: menuId },
+		});
+
+		if (!existingMenu) {
+			return res.status(404).json({
+				success: false,
+				message: "Menu tidak ditemukan",
+			});
+		}
+
+		// If renaming, check for duplicate name
+		if (nama && nama.trim() !== existingMenu.nama) {
+			const duplicate = await prisma.menu.findUnique({
+				where: { nama: nama.toLowerCase().trim() },
+			});
+			if (duplicate && duplicate.id !== menuId) {
+				return res.status(409).json({
+					success: false,
+					message: `Menu dengan nama "${nama}" sudah ada`,
+				});
+			}
+		}
+
+		const result = await prisma.$transaction(async (tx) => {
+			// 1. Update menu name and/or kategori
+			const updateData = {};
+			if (nama && nama.trim()) updateData.nama = nama.toLowerCase().trim();
+			if (kategori && kategori.trim()) updateData.kategori = kategori.trim();
+
+			const updatedMenu = await tx.menu.update({
+				where: { id: menuId },
+				data: updateData,
+			});
+
+			// 2. If resep array is provided, replace all existing recipes
+			if (Array.isArray(resep)) {
+				// Delete existing recipes for this menu
+				await tx.resep.deleteMany({
+					where: { menu_id: menuId },
+				});
+
+				// Insert new recipes
+				if (resep.length > 0) {
+					const validResep = resep.filter(
+						(r) => r.bahan_id && r.gramasi && r.gramasi > 0
+					);
+
+					if (validResep.length > 0) {
+						await tx.resep.createMany({
+							data: validResep.map((r) => ({
+								menu_id: menuId,
+								bahan_id: r.bahan_id,
+								gramasi: r.gramasi,
+							})),
+						});
+					}
+
+					console.log(`✅ ${validResep.length} resep baru ditambahkan ke menu`);
+				}
+			}
+
+			// 3. Fetch updated menu with resep for response
+			const fullMenu = await tx.menu.findUnique({
+				where: { id: menuId },
+				include: {
+					resep: {
+						include: {
+							bahan: true,
+						},
+					},
+				},
+			});
+
+			return fullMenu;
+		});
+
+		console.log("✅ [Backend] Menu berhasil diedit:", result.nama);
+
+		return res.status(200).json({
+			success: true,
+			message: "Menu berhasil diperbarui",
+			data: result,
+		});
+	} catch (error) {
+		console.error("❌ [Backend] Error editing menu:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Server error",
+			error: error.message,
+		});
+	}
+}
+
+// =================================================================
+// BAGIAN 9: getRecipeById (Get menu + ingredients for edit form)
+// =================================================================
+async function getRecipeById(req, res) {
+	try {
+		const { id } = req.params;
+
+		if (!id || isNaN(parseInt(id))) {
+			return res.status(400).json({
+				success: false,
+				message: "ID menu tidak valid",
+			});
+		}
+
+		const menuId = parseInt(id);
+
+		const menu = await prisma.menu.findUnique({
+			where: { id: menuId },
+			include: {
+				resep: {
+					include: {
+						bahan: {
+							select: {
+								id: true,
+								nama: true,
+							},
+						},
+					},
+				},
+			},
+		});
+
+		if (!menu) {
+			return res.status(404).json({
+				success: false,
+				message: "Menu tidak ditemukan",
+			});
+		}
+
+		const ingredients = menu.resep.map((r) => ({
+			id: r.id,
+			nama: r.bahan.nama,
+			gramasi: r.gramasi,
+			bahan_id: r.bahan_id,
+		}));
+
+		return res.status(200).json({
+			menu: {
+				nama: menu.nama,
+				kategori: menu.kategori,
+			},
+			ingredients,
+		});
+	} catch (error) {
+		console.error("❌ [Backend] Error getting recipe by id:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Server error",
+			error: error.message,
+		});
+	}
+}
+
+// =================================================================
+// BAGIAN 10: updateRecipe (Update menu name, kategori, and ingredients)
+// =================================================================
+async function updateRecipe(req, res) {
+	try {
+		const { id } = req.params;
+		const { nama, kategori, ingredients } = req.body;
+
+		console.log(`📝 [Backend] Updating recipe ID: ${id}`, { nama, kategori, ingredients });
+
+		if (!id || isNaN(parseInt(id))) {
+			return res.status(400).json({
+				success: false,
+				message: "ID resep tidak valid",
+			});
+		}
+
+		const menuId = parseInt(id);
+
+		const existingMenu = await prisma.menu.findUnique({
+			where: { id: menuId },
+		});
+
+		if (!existingMenu) {
+			return res.status(404).json({
+				success: false,
+				message: "Resep tidak ditemukan",
+			});
+		}
+
+		// Check for duplicate name if renaming
+		if (nama && nama.toLowerCase().trim() !== existingMenu.nama) {
+			const duplicate = await prisma.menu.findUnique({
+				where: { nama: nama.toLowerCase().trim() },
+			});
+			if (duplicate && duplicate.id !== menuId) {
+				return res.status(409).json({
+					success: false,
+					message: `Resep dengan nama "${nama}" sudah ada`,
+				});
+			}
+		}
+
+		const result = await prisma.$transaction(async (tx) => {
+			// 1. Update menu metadata
+			const updateData = {};
+			if (nama && nama.trim()) updateData.nama = nama.toLowerCase().trim();
+			if (kategori && kategori.trim()) updateData.kategori = kategori.trim();
+
+			if (Object.keys(updateData).length > 0) {
+				await tx.menu.update({
+					where: { id: menuId },
+					data: updateData,
+				});
+			}
+
+			// 2. Replace ingredients if provided
+			if (Array.isArray(ingredients)) {
+				await tx.resep.deleteMany({
+					where: { menu_id: menuId },
+				});
+
+				const validIngredients = ingredients.filter(
+					(i) => i.bahan_id && i.gramasi && i.gramasi > 0
+				);
+
+				if (validIngredients.length > 0) {
+					await tx.resep.createMany({
+						data: validIngredients.map((i) => ({
+							menu_id: menuId,
+							bahan_id: i.bahan_id,
+							gramasi: i.gramasi,
+						})),
+					});
+				}
+			}
+
+			// 3. Return full updated data
+			return tx.menu.findUnique({
+				where: { id: menuId },
+				include: {
+					resep: {
+						include: {
+							bahan: {
+								select: { id: true, nama: true },
+							},
+						},
+					},
+				},
+			});
+		});
+
+		const responseData = {
+			menu: {
+				id: result.id,
+				nama: result.nama,
+				kategori: result.kategori,
+			},
+			ingredients: result.resep.map((r) => ({
+				id: r.id,
+				nama: r.bahan.nama,
+				gramasi: r.gramasi,
+				bahan_id: r.bahan_id,
+			})),
+		};
+
+		console.log("✅ [Backend] Recipe updated:", result.nama);
+
+		return res.status(200).json({
+			success: true,
+			message: "Resep berhasil diperbarui",
+			...responseData,
+		});
+	} catch (error) {
+		console.error("❌ [Backend] Error updating recipe:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Server error",
+			error: error.message,
+		});
+	}
+}
+
+// =================================================================
 // EXPORTS
 // =================================================================
 module.exports = {
@@ -1887,4 +2187,7 @@ module.exports = {
 	getRecipeNutritionById,
 	saveMenuComposition,
 	getMenuNutritionById,
+	editMenu,
+	getRecipeById,
+	updateRecipe,
 };

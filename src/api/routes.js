@@ -8,8 +8,11 @@ const {
   searchMenus,
   createMenu,
   getRecipeNutritionById,
-  saveMenuComposition, // ✅ IMPORT INI
+  saveMenuComposition,
   getMenuNutritionById,
+  editMenu,
+  getRecipeById,
+  updateRecipe,
 } = require("../controllers/menuController");
 const { suggestMenuStream } = require("../controllers/streamController");
 const {
@@ -27,7 +30,8 @@ router.get("/menus", getMenus);
 router.post("/generate", generateNutrition);
 router.post("/suggest-menu", suggestMenu);
 router.post("/menu", createMenu);
-router.post("/menu/composition", saveMenuComposition); // ✅ TAMBAH ROUTE INI
+router.post("/menu/composition", saveMenuComposition);
+router.put("/menu/:id", editMenu);
 router.get("/menu/:id", getMenuNutritionById);
 router.get("/search", searchMenus);
 router.post("/suggest-menu-stream", suggestMenuStream);
@@ -38,5 +42,7 @@ router.put("/ingredients/:id", editIngredientsNutritions);
 router.delete("/ingredients/:id", deleteIngredients);
 router.get("/ingredients/search", searchIngredients);
 router.get("/recipes/:recipeId/nutrition", getRecipeNutritionById);
+router.get("/recipes/:id", getRecipeById);
+router.put("/recipes/:id", updateRecipe);
 
 module.exports = router;
