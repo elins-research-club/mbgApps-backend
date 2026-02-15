@@ -13,6 +13,7 @@ const {
   editMenu,
   getRecipeById,
   updateRecipe,
+  getAllRecipes,
 } = require("../controllers/menuController");
 const { suggestMenuStream } = require("../controllers/streamController");
 const {
@@ -44,5 +45,6 @@ router.get("/ingredients/search", searchIngredients);
 router.get("/recipes/:recipeId/nutrition", getRecipeNutritionById);
 router.get("/recipes/:id", getRecipeById);
 router.put("/recipes/:id", updateRecipe);
+router.get("/recipes", getAllRecipes);
 
 module.exports = router;

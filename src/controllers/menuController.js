@@ -2175,6 +2175,82 @@ async function updateRecipe(req, res) {
 	}
 }
 
+const getAllRecipes = async (req, res) => {
+  try {
+    // Query all recipes/menus from database with ingredients
+    const menus = await prisma.menu.findMany({
+      include: {
+        resep: {
+          include: {
+            bahan: true,
+          },
+        },
+      },
+      orderBy: {
+        id: 'desc'
+      }
+    });
+
+    const nutrisiKeys = [
+      "energi_kkal", "protein_g", "lemak_g", "karbohidrat_g",
+      "serat_g", "abu_g", "kalsium_mg", "fosfor_mg", "besi_mg",
+      "natrium_mg", "kalium_mg", "tembaga_mg", "seng_mg",
+      "retinol_mcg", "b_kar_mcg", "karoten_total_mcg",
+      "thiamin_mg", "riboflavin_mg", "niasin_mg", "vitamin_c_mg",
+    ];
+
+    const recipes = menus.map((menu) => {
+      const totalNutrisi = {};
+      nutrisiKeys.forEach((key) => (totalNutrisi[key] = 0));
+      let totalGramasi = 0;
+
+      const rincianBahan = menu.resep.map((r) => {
+        const ratio = r.gramasi / 100;
+        totalGramasi += r.gramasi;
+        const bahanNutrisi = {};
+
+        nutrisiKeys.forEach((key) => {
+          const val = (r.bahan[key] || 0) * ratio;
+          totalNutrisi[key] += val;
+          bahanNutrisi[key] = parseFloat(val.toFixed(2));
+        });
+
+        return {
+          id: r.id,
+          nama: r.bahan.nama,
+          gramasi: r.gramasi,
+          nutrisi: bahanNutrisi,
+        };
+      });
+
+      nutrisiKeys.forEach((key) => {
+        totalNutrisi[key] = parseFloat(totalNutrisi[key].toFixed(2));
+      });
+
+      return {
+        id: menu.id,
+        nama: menu.nama,
+        kategori: menu.kategori,
+        total_gramasi: totalGramasi,
+        nutrisi: totalNutrisi,
+        rincian_bahan: rincianBahan,
+      };
+    });
+
+    res.json({
+      success: true,
+      recipes: recipes
+    });
+  } catch (error) {
+    console.error("Error fetching all recipes:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengambil daftar resep",
+      error: error.message
+    });
+  }
+};
+
 // =================================================================
 // EXPORTS
 // =================================================================
@@ -2190,4 +2266,5 @@ module.exports = {
 	editMenu,
 	getRecipeById,
 	updateRecipe,
+	getAllRecipes,
 };
