@@ -116,6 +116,7 @@ async function seedBahan() {
     });
     for (const row of records) {
       console.log(row);
+      if (cleanString(row["2"]) == "olahan") continue;
       const namaBahan = cleanString(row["3"]); // Gunakan pembersih
       if (!namaBahan) continue;
       const parseValue = (value) =>
@@ -431,6 +432,7 @@ async function seedResep() {
   return successfullyLinkedMenus;
 }
 
+// TODO: remove olahan from nutrisurvey database
 async function parseDataNutrisurvey() {
   const records = [];
   const filePath = path.join(__dirname, `../data/csv/foods_content.csv`);
@@ -439,6 +441,8 @@ async function parseDataNutrisurvey() {
     fs.createReadStream(filePath)
       .pipe(csv({})) // Use ";" if your CSV uses semicolon
       .on("data", (row) => {
+        // still wrong tho, need to get the pattern
+        if(row["Code"].startsWith("B") || row["Code"].startsWith("C") || row["Code"].startsWith("D")) return;
         const bahanData = {
           nama: row.Foods || row["Foods"],
           energi_kkal: parseFloat(row.energy) / 4.184 || 0,
