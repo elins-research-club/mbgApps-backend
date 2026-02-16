@@ -687,189 +687,183 @@ async function getRecommendation(
 //   };
 // }
 //
-// temporary fix
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { PrismaClient } = require("@prisma/client");
+function optimizeFoodPortions(currentFoods, goalDaily) {
+  const goal = {
+    energi_kkal: goalDaily.energi_kkal / 3,
+    protein_g: goalDaily.protein_g / 3,
+    lemak_g: goalDaily.lemak_g / 3,
+    karbohidrat_g: goalDaily.karbohidrat_g / 3,
+    serat_g: goalDaily.serat_g / 3,
+  };
 
-const prisma = new PrismaClient();
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-const MODEL_NAME = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const foodsList = Object.keys(currentFoods);
+  const nutrients = [
+    "energi_kkal",
+    "protein_g",
+    "lemak_g",
+    "karbohidrat_g",
+    "serat_g",
+  ];
 
-async function getAllRecommendation(currentFoods, currentNutrition, menuId) {
-  // Check DB first — return immediately if recommendation already exists
-  const existing = await prisma.recommendation.findFirst({
-    where: { menu_id: menuId },
-    include: {
-      saran: true,
-      kekurangan: true,
-    },
+  const foodsPerGram = {};
+  foodsList.forEach((foodName) => {
+    const food = currentFoods[foodName];
+    foodsPerGram[foodName] = {};
+    nutrients.forEach((nutrient) => {
+      foodsPerGram[foodName][nutrient] = food[nutrient] / food.gramasi;
+    });
   });
 
-  if (existing) {
-    return {
-      combinedSaran: existing.saran.map((s) => ({
-        kelas: s.kelas,
-        nama: s.nama,
-        serving: s.serving,
-      })),
-      combinedKekurangan: existing.kekurangan.map((k) => ({
-        kelas: k.kelas,
-        menu: k.menu,
-        kurang: k.kurang,
-      })),
-    };
-  }
+  const nutrientMatrix = nutrients.map((nutrient) =>
+    foodsList.map((foodName) => foodsPerGram[foodName][nutrient]),
+  );
 
-  // No existing recommendation — call Gemini
-  const foodsSummary = Object.entries(currentFoods).map(([nama, data]) => ({
-    nama,
-    gramasi_saat_ini: data.gramasi,
-    per_gram: {
-      energi_kkal: +(data.energi_kkal / data.gramasi).toFixed(5),
-      protein_g: +(data.protein_g / data.gramasi).toFixed(5),
-      lemak_g: +(data.lemak_g / data.gramasi).toFixed(5),
-      karbohidrat_g: +(data.karbohidrat_g / data.gramasi).toFixed(5),
-      serat_g: +(data.serat_g / data.gramasi).toFixed(5),
-    },
-  }));
+  const goalVector = nutrients.map((nutrient) => goal[nutrient]);
+  const weights = [1.5, 2.0, 1.5, 1.5, 1.0];
 
-  const goalsList = Object.entries(goals).map(([classGrade, goalData]) => ({
-    kelas: parseInt(classGrade),
-    target: {
-      energi_kkal: +(goalData.energi_kkal / 3).toFixed(2),
-      protein_g: +(goalData.protein_g / 3).toFixed(2),
-      lemak_g: +(goalData.lemak_g / 3).toFixed(2),
-      karbohidrat_g: +(goalData.karbohidrat_g / 3).toFixed(2),
-      serat_g: +(goalData.serat_g / 3).toFixed(2),
-    },
-  }));
-
-  const prompt = `
-Kamu adalah sistem rekomendasi gizi otomatis. Tugasmu adalah menghitung penyesuaian porsi makanan secara MATEMATIS dan PRESISI untuk memenuhi target nutrisi setiap kelas.
-
-=== MENU SAAT INI ===
-Berikut daftar makanan beserta porsi saat ini dan kandungan nutrisi per gram:
-${JSON.stringify(foodsSummary, null, 2)}
-
-=== TOTAL NUTRISI SAAT INI ===
-${JSON.stringify(currentNutrition, null, 2)}
-
-=== TARGET NUTRISI PER KELAS ===
-Kelas 1 = TK A, Kelas 2 = TK B, Kelas 3-5 = SD 1-3, Kelas 6-8 = SD 4-6, Kelas 9-10 = SMP 1-2, Kelas 11-13 = SMA 1-3, Kelas 14 = Dewasa.
-${JSON.stringify(goalsList, null, 2)}
-
-=== INSTRUKSI ===
-Untuk setiap kelas (1 sampai 14):
-
-1. Hitung selisih (gap) antara total nutrisi saat ini dengan target kelas tersebut:
-   gap = target - currentNutrition
-   - Nilai positif = kekurangan (perlu ditambah)
-   - Nilai negatif = kelebihan (perlu dikurangi)
-
-2. Untuk mengisi gap, rekomendasikan penyesuaian porsi (delta gramasi) pada makanan yang PALING RELEVAN:
-   - Untuk menambah energi/karbohidrat → prioritaskan makanan kategori karbohidrat
-   - Untuk menambah lemak → prioritaskan makanan tinggi lemak
-   - Untuk menambah serat → prioritaskan makanan tinggi serat per gram
-   - Untuk menambah protein → prioritaskan makanan tinggi protein per gram
-   - Boleh menyesuaikan lebih dari satu makanan per kelas jika diperlukan
-   - Jangan rekomendasikan makanan di luar daftar menu yang ada
-   - Hanya masukkan makanan yang benar-benar perlu diubah porsinya
-   - Delta negatif berarti porsi dikurangi, delta positif berarti porsi ditambah
-
-3. Setelah rekomendasi porsi diterapkan, hitung sisa kekurangan yang MASIH BELUM TERPENUHI.
-   Jika semua nutrisi sudah terpenuhi, tulis "Tidak ada kekurangan".
-
-=== FORMAT OUTPUT ===
-Jawab HANYA dengan JSON murni. Tidak ada teks lain, tidak ada markdown, tidak ada komentar.
-
-{
-  "rekomendasi": {
-    "combinedSaran": [
-      {
-        "kelas": <integer>,
-        "nama": "<nama makanan sesuai daftar, huruf kecil>",
-        "serving": <delta gramasi, number, positif=tambah, negatif=kurangi>
-      }
-    ],
-    "combinedKekurangan": [
-      {
-        "kelas": <integer>,
-        "menu": "Total Menu",
-        "kurang": "<contoh: 'Energi (120kkal), Lemak (5.2g), Serat (3.1g)' atau 'Tidak ada kekurangan'>"
-      }
-    ]
-  }
-}
-
-PENTING:
-- combinedKekurangan HARUS memiliki tepat 14 entri (satu untuk setiap kelas 1-14)
-- combinedSaran hanya berisi entri untuk makanan yang perlu disesuaikan
-- Angka serving dan kurang harus dibulatkan maksimal 1 desimal
-- Urutkan combinedSaran dan combinedKekurangan berdasarkan kelas ascending
-`;
-
-  const result = await model.generateContent(prompt);
-  const rawText = result.response.text();
-
-  const cleaned = rawText
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-
-  let parsed;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (err) {
-    throw new Error(
-      `Gagal parsing respons Gemini sebagai JSON.\nError: ${err.message}\nRaw response:\n${rawText}`,
+  function objective(portions) {
+    const achieved = nutrientMatrix.map((row, i) =>
+      row.reduce((sum, val, j) => sum + val * portions[j], 0),
     );
+
+    let weightedError = 0;
+    for (let i = 0; i < nutrients.length; i++) {
+      const relativeError = Math.pow(
+        (achieved[i] - goalVector[i]) / goalVector[i],
+        2,
+      );
+      weightedError += weights[i] * relativeError;
+    }
+
+    const totalWeight = portions.reduce((sum, p) => sum + p, 0);
+    if (totalWeight > 1200) {
+      weightedError += Math.pow((totalWeight - 1200) / 500, 2);
+    }
+
+    return weightedError;
   }
 
-  const { combinedSaran, combinedKekurangan } = parsed.rekomendasi;
+  function gradient(portions) {
+    const grad = [];
+    const epsilon = 1e-5;
+    const f0 = objective(portions);
 
-  // Validate all 14 classes are present in kekurangan
-  const kelasSet = new Set(combinedKekurangan.map((k) => k.kelas));
-  for (let i = 1; i <= Object.keys(goals).length; i++) {
-    if (!kelasSet.has(i)) {
-      console.warn(`[getAllRecommendation] Missing kekurangan for kelas ${i}`);
+    for (let i = 0; i < portions.length; i++) {
+      const portsPlus = [...portions];
+      portsPlus[i] += epsilon;
+      const fPlus = objective(portsPlus);
+      grad.push((fPlus - f0) / epsilon);
+    }
+
+    return grad;
+  }
+
+  let portions = foodsList.map((foodName) => currentFoods[foodName].gramasi);
+
+  const bounds = foodsList.map((foodName) => {
+    const original = currentFoods[foodName].gramasi;
+    const min = Math.max(30, original * 0.3);
+    const max = Math.min(400, original * 3);
+    return { min, max };
+  });
+
+  let learningRate = 10.0;
+  const momentum = 0.9;
+  let velocity = new Array(portions.length).fill(0);
+
+  for (let iter = 0; iter < 2000; iter++) {
+    const grad = gradient(portions);
+
+    for (let i = 0; i < portions.length; i++) {
+      velocity[i] = momentum * velocity[i] - learningRate * grad[i];
+      portions[i] += velocity[i];
+      portions[i] = Math.max(
+        bounds[i].min,
+        Math.min(bounds[i].max, portions[i]),
+      );
+    }
+
+    if (iter % 100 === 0) {
+      learningRate *= 0.95;
     }
   }
 
-  // Save to DB — always save even if combinedSaran is empty
-  // so subsequent calls don't re-trigger Gemini unnecessarily
-  try {
-    await prisma.recommendation.create({
-      data: {
-        menu_id: menuId,
-        saran: {
-          create: combinedSaran.map((s) => ({
-            kelas: s.kelas,
-            nama: s.nama,
-            serving: s.serving,
-          })),
-        },
-        kekurangan: {
-          create: combinedKekurangan.map((k) => ({
-            kelas: k.kelas,
-            menu: k.menu,
-            kurang: k.kurang,
-          })),
-        },
-      },
+  const achievedNutrients = nutrientMatrix.map((row) =>
+    row.reduce((sum, val, j) => sum + val * portions[j], 0),
+  );
+
+  const response = {
+    success: true,
+    meal_type: "one_meal",
+    portions: {},
+    nutritional_achievement: {},
+    daily_projection: {},
+    total_weight_g: portions.reduce((sum, p) => sum + p, 0),
+  };
+
+  foodsList.forEach((foodName, i) => {
+    const original = currentFoods[foodName].gramasi;
+    const optimized = portions[i];
+    const servings = optimized / original;
+
+    response.portions[foodName] = {
+      recommended_grams: Math.round(optimized * 10) / 10,
+      original_grams: original,
+      servings: Math.round(servings * 100) / 100,
+    };
+  });
+
+  nutrients.forEach((nutrient, i) => {
+    const goalVal = goalVector[i];
+    const achievedVal = achievedNutrients[i];
+    const gap = goalVal - achievedVal;
+    const percent = (achievedVal / goalVal) * 100;
+
+    let status = "short";
+    if (percent >= 95) status = "achieved";
+    else if (percent >= 80) status = "close";
+
+    response.nutritional_achievement[nutrient] = {
+      goal_per_meal: Math.round(goalVal * 10) / 10,
+      achieved_per_meal: Math.round(achievedVal * 10) / 10,
+      gap: Math.round(gap * 10) / 10,
+      percentage: Math.round(percent * 10) / 10,
+      status: status,
+    };
+
+    const dailyAchieved = achievedVal * 3;
+    const dailyGoal = goalDaily[nutrient];
+    const dailyPercent = (dailyAchieved / dailyGoal) * 100;
+
+    response.daily_projection[nutrient] = {
+      goal_daily: dailyGoal,
+      projected_daily: Math.round(dailyAchieved * 10) / 10,
+      percentage: Math.round(dailyPercent * 10) / 10,
+    };
+  });
+
+  return response;
+}
+
+// Get all recommendations - updated to accept object of goals
+async function getAllRecommendation(currentFoods) {
+  const combinedSaran = [];
+
+  for (const goalId in goals) {
+    const goalDaily = goals[goalId];
+    const result = optimizeFoodPortions(currentFoods, goalDaily);
+
+    combinedSaran.push({
+      goal_id: goalId,
+      goal_daily: goalDaily,
+      recommendation: result,
     });
-  } catch (dbErr) {
-    // Log but don't crash — recommendation was still computed successfully
-    console.error(
-      `[getAllRecommendation] Failed to save to DB for menu_id ${menuId}:`,
-      dbErr.message,
-    );
   }
 
   return {
-    combinedSaran,
-    combinedKekurangan,
+    success: true,
+    total_goals: combinedSaran.length,
+    combinedSaran: combinedSaran,
   };
 }
 
