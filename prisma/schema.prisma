@@ -51,3 +51,12 @@ model Resep {
   menu      Menu    @relation(fields: [menu_id], references: [id])
   bahan     Bahan   @relation(fields: [bahan_id], references: [id])
 }
+
+model MealPlan {
+  id              String   @id @default(uuid())
+  targetClass     Float?   @default(0)
+  recipes         String   // JSON string storing array of recipes with quantities
+  totalNutrition  String   
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
