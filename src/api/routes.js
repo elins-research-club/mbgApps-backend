@@ -24,6 +24,12 @@ const {
   addIngredients,
   searchIngredients,
 } = require("../controllers/ingredientController");
+const {
+  saveMealPlan,
+  getMealPlanById,
+  getAllMealPlans,
+  deleteMealPlan,
+} = require("../controllers/mealPlanController");
 
 const router = express.Router();
 
@@ -46,5 +52,11 @@ router.get("/recipes/:recipeId/nutrition", getRecipeNutritionById);
 router.get("/recipes/:id", getRecipeById);
 router.put("/recipes/:id", updateRecipe);
 router.get("/recipes", getAllRecipes);
+
+// Meal Plans routes
+router.post("/meal-plans", saveMealPlan);
+router.get("/meal-plans", getAllMealPlans);
+router.get("/meal-plans/:id", getMealPlanById);
+router.delete("/meal-plans/:id", deleteMealPlan);
 
 module.exports = router;
