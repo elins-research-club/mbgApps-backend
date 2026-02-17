@@ -30,7 +30,9 @@ const {
   getAllMealPlans,
   deleteMealPlan,
 } = require("../controllers/mealPlanController");
-
+const {
+  getAllRecommendationHandler,
+} = require("../controllers/recommendationSystemController");
 const router = express.Router();
 
 router.get("/menus", getMenus);
@@ -52,7 +54,7 @@ router.get("/recipes/:recipeId/nutrition", getRecipeNutritionById);
 router.get("/recipes/:id", getRecipeById);
 router.put("/recipes/:id", updateRecipe);
 router.get("/recipes", getAllRecipes);
-
+router.post("/get_all_recommendations", getAllRecommendationHandler);
 // Meal Plans routes
 router.post("/meal-plans", saveMealPlan);
 router.get("/meal-plans", getAllMealPlans);
