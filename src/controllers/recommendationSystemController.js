@@ -479,9 +479,6 @@ function buildModel(foods, current, goal) {
     variables: {},
   };
 
-  console.log("currentFoods", foods);
-  console.log("currentNutrition", current);
-  console.log("goal", goal);
   const mainFoods = filterForLP(foods);
   // Target = 1/3 daily requirement
   const target = {};
@@ -693,16 +690,15 @@ function optimizeFoodPortions(currentFoods, goalDaily) {
     protein_g: goalDaily.protein_g / 3,
     lemak_g: goalDaily.lemak_g / 3,
     karbohidrat_g: goalDaily.karbohidrat_g / 3,
-    serat_g: goalDaily.serat_g / 3,
+    // serat_g: goalDaily.serat_g / 3,
   };
-
   const foodsList = Object.keys(currentFoods);
   const nutrients = [
     "energi_kkal",
     "protein_g",
     "lemak_g",
     "karbohidrat_g",
-    "serat_g",
+    // "serat_g",
   ];
 
   const foodsPerGram = {};
@@ -719,7 +715,7 @@ function optimizeFoodPortions(currentFoods, goalDaily) {
   );
 
   const goalVector = nutrients.map((nutrient) => goal[nutrient]);
-  const weights = [1.5, 2.0, 1.5, 1.5, 1.0];
+  const weights = [1.5, 2.0, 1.5, 1.5];
 
   function objective(portions) {
     const achieved = nutrientMatrix.map((row, i) =>
@@ -794,10 +790,10 @@ function optimizeFoodPortions(currentFoods, goalDaily) {
 
   const response = {
     success: true,
-    meal_type: "one_meal",
+    // meal_type: "one_meal",
     portions: {},
     nutritional_achievement: {},
-    daily_projection: {},
+    // daily_projection: {},
     total_weight_g: portions.reduce((sum, p) => sum + p, 0),
   };
 
@@ -831,15 +827,15 @@ function optimizeFoodPortions(currentFoods, goalDaily) {
       status: status,
     };
 
-    const dailyAchieved = achievedVal * 3;
-    const dailyGoal = goalDaily[nutrient];
-    const dailyPercent = (dailyAchieved / dailyGoal) * 100;
-
-    response.daily_projection[nutrient] = {
-      goal_daily: dailyGoal,
-      projected_daily: Math.round(dailyAchieved * 10) / 10,
-      percentage: Math.round(dailyPercent * 10) / 10,
-    };
+    // const dailyAchieved = achievedVal * 3;
+    // const dailyGoal = goalDaily[nutrient];
+    // const dailyPercent = (dailyAchieved / dailyGoal) * 100;
+    //
+    // response.daily_projection[nutrient] = {
+    //   goal_daily: dailyGoal,
+    //   projected_daily: Math.round(dailyAchieved * 10) / 10,
+    //   percentage: Math.round(dailyPercent * 10) / 10,
+    // };
   });
 
   return response;
@@ -867,7 +863,21 @@ async function getAllRecommendation(currentFoods) {
   };
 }
 
+async function getAllRecommendationHandler(req, res) {
+  try {
+    const currentFoods = req.body;
+    const data = await getAllRecommendation(currentFoods);
+    res.status(200).json(data);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+}
 module.exports = {
   getRecommendation,
   getAllRecommendation,
+  getAllRecommendationHandler,
 };
