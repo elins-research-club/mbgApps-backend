@@ -115,7 +115,7 @@ async function seedBahan() {
       skipLines: 1,
     });
     for (const row of records) {
-      console.log(row);
+      // console.log(row);
       if (cleanString(row["2"]) == "olahan") continue;
       const namaBahan = cleanString(row["3"]); // Gunakan pembersih
       if (!namaBahan) continue;
