@@ -1,9 +1,8 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-// TODO: revise the database to include name of the meal plan
 const saveMealPlan = async (req, res) => {
   try {
-    const { targetClass, recipes, totalNutrition } = req.body;
+    const { name, targetClass, recipes, totalNutrition } = req.body;
 
     // Validate required fields
     if (!targetClass || !recipes || !totalNutrition) {
@@ -24,6 +23,7 @@ const saveMealPlan = async (req, res) => {
     // Create the meal plan
     const mealPlan = await prisma.mealPlan.create({
       data: {
+        name,
         targetClass,
         recipes: JSON.stringify(recipes),
         totalNutrition: JSON.stringify(totalNutrition),
@@ -92,7 +92,7 @@ const getMealPlanById = async (req, res) => {
 
 const getAllMealPlans = async (req, res) => {
   try {
-    const { limit = 50, offset = 0 } = req.query;
+    const { limit = 1000, offset = 0 } = req.query;
 
     const mealPlans = await prisma.mealPlan.findMany({
       take: parseInt(limit),
@@ -107,6 +107,7 @@ const getAllMealPlans = async (req, res) => {
     // Parse JSON strings for each meal plan
     const data = mealPlans.map((plan) => ({
       id: plan.id,
+      name: plan.name,
       targetClass: plan.targetClass,
       recipes: JSON.parse(plan.recipes),
       totalNutrition: JSON.parse(plan.totalNutrition),
