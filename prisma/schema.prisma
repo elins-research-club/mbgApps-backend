@@ -54,6 +54,7 @@ model Resep {
 
 model MealPlan {
   id              String   @id @default(uuid())
+  name            String   
   targetClass     Float?   @default(0)
   recipes         String   // JSON string storing array of recipes with quantities
   totalNutrition  String   
