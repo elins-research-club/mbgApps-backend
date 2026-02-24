@@ -102,7 +102,7 @@ const goals = {
     // abu_g: 5, // optional, tidak tercantum di AKG resmi
     kalsium_mg: 1000,
     // fosfor_mg: 500,
-    // besi_mg: 10,
+    besi_mg: 10,
     natrium_mg: 1000,
     kalium_mg: 3200,
     tembaga_mg: 570,
@@ -148,7 +148,7 @@ const goals = {
     // abu_g: 5, // optional, tidak tercantum di AKG resmi
     kalsium_mg: 1000,
     // fosfor_mg: 1250,
-    // besi_mg: 8,
+    besi_mg: 8,
     natrium_mg: 1300,
     kalium_mg: 3900,
     tembaga_mg: 700,
@@ -171,7 +171,7 @@ const goals = {
     // abu_g: 5, // optional, tidak tercantum di AKG resmi
     kalsium_mg: 1000,
     // fosfor_mg: 1250,
-    // besi_mg: 8,
+    besi_mg: 8,
     natrium_mg: 1300,
     kalium_mg: 3900,
     tembaga_mg: 700,
