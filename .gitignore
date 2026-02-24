@@ -4,3 +4,4 @@ prisma/migrations
 .env
 *.db
 .vscode/*
+.env
