@@ -657,6 +657,16 @@ const suggestMenu = async (req, res) => {
     const suggestion = await getAiSuggestion(new_menu_name, existingMenuNames);
     console.log("✅ Hasil AI suggestion:", JSON.stringify(suggestion, null, 2));
 
+    // Check if AI detected a processed dish
+    if (suggestion.is_valid_input === false && suggestion.error_type === "processed_dish") {
+      return res.status(400).json({
+        success: false,
+        error_type: "invalid_input",
+        message: suggestion.warning,
+        suggested_raw_ingredients: suggestion.suggested_raw_ingredients || [],
+      });
+    }
+
     if (
       !suggestion ||
       !suggestion.suggested_category ||

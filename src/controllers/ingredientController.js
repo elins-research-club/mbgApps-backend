@@ -209,7 +209,82 @@ Return only the JSON object.`;
     return scientificMatchCache[ingredientName];
   }
 }
+
+async function validateIngredientInput(ingredientName) {
+  const prompt = `You are a strict food science validator. Determine if the input is a RAW INGREDIENT or a PROCESSED DISH/MENU.
+
+INPUT: "${ingredientName}"
+
+STRICT RULES FOR RAW INGREDIENTS (✅ VALID):
+- Single unprocessed items: "ayam" (chicken), "tomat" (tomato), "bawang" (onion), "ikan" (fish), "telur" (egg)
+- Basic grains/staples: "beras" (rice), "gandum" (wheat), "jagung" (corn)
+- Fresh produce: "wortel" (carrot), "kentang" (potato), "bayam" (spinach)
+
+INDICATORS OF PROCESSED DISH/MENU (❌ INVALID - REJECT):
+1. Contains cooking methods: "goreng" (fried), "bakar" (grilled), "rebus" (boiled), "tumis" (sautéed), "panggang" (roasted), "kukus" (steamed)
+2. Traditional/international dish names: "soto", "sate", "rendang", "gado-gado", "bakso", "mie goreng", "nasi goreng", "kebab", "burger", "pizza", "pasta", "curry", "stew"
+3. Prepared foods: "nugget", "sosis" (sausage), "patty", "cutlet"
+4. Combinations: "ayam bakar", "ikan goreng", "daging panggang"
+5. Street food/fast food: "kebab", "shawarma", "taco", "burrito"
+
+EXAMPLES:
+- "kebab" → REJECT (processed/grilled meat dish)
+- "ayam goreng" → REJECT (fried chicken dish)
+- "nasi goreng" → REJECT (fried rice dish)
+- "ayam" → ACCEPT (raw chicken)
+- "daging sapi" → ACCEPT (raw beef)
+
+Return ONLY valid JSON:
+{
+  "is_raw_ingredient": true/false,
+  "input": "${ingredientName}",
+  "reason": "Brief explanation why accepted/rejected",
+  "suggested_raw_ingredients": ["raw ingredient 1", "raw ingredient 2"]
+}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+    
+    let cleaned = text.replace(/```json|```/g, "").trim();
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+    
+    if (first !== -1 && last !== -1) {
+      cleaned = cleaned.substring(first, last + 1);
+      const parsed = JSON.parse(cleaned);
+      console.log(`🔍 [Validation] "${ingredientName}" → is_raw_ingredient: ${parsed.is_raw_ingredient}, reason: ${parsed.reason}`);
+      return parsed;
+    }
+    
+    // Default to accepting if validation fails
+    console.warn(`⚠️ [Validation] Failed to parse validation response, defaulting to accept`);
+    return { is_raw_ingredient: true, input: ingredientName };
+  } catch (err) {
+    console.error("❌ [Validation] Error:", err);
+    // Default to accepting if validation fails
+    return { is_raw_ingredient: true, input: ingredientName };
+  }
+}
+
 async function estimateIngredientWithLLM(ingredientName) {
+  const validation = await validateIngredientInput(ingredientName);
+  console.log('IS RAW INGREDIENT: ',validation.is_raw_ingredient)
+  
+  if (!validation.is_raw_ingredient) {
+    console.log(`⚠️ [estimateIngredientWithLLM] Rejected processed dish: "${ingredientName}"`);
+    return {
+      name: ingredientName,
+      method: "rejected",
+      error: "processed_dish",
+      reason: validation.reason,
+      suggested_raw_ingredients: validation.suggested_raw_ingredients || [],
+      predicted_composition: null,
+      confidence: 0,
+    };
+  }
+
   try {
     // Step 1: Get English equivalent
     const englishName = await getEnglishEquivalent(ingredientName);
@@ -825,6 +900,18 @@ async function getIngredients(req, res) {
     console.log(
       `📊 [getIngredients] Has predicted_composition: ${!!result.predicted_composition}`
     );
+
+    // Check if input was rejected as processed dish
+    if (result.method === "rejected" && result.error === "processed_dish") {
+      console.log(`⚠️ [getIngredients] Rejected processed dish: "${name}"`);
+      return res.status(400).json({
+        success: false,
+        error_type: "processed_dish",
+        message: `Input '${name}' terdeteksi sebagai menu/masakan yang sudah diproses. Sistem ini hanya menerima BAHAN MENTAH (raw ingredients). Contoh: 'ayam', 'ikan', 'tomat', 'beras', dll.`,
+        reason: result.reason,
+        suggested_raw_ingredients: result.suggested_raw_ingredients || [],
+      });
+    }
 
     // ✅ PERBAIKAN: Return format yang konsisten
     if (result.predicted_composition) {

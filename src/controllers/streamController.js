@@ -91,6 +91,23 @@ const suggestMenuStream = async (req, res) => {
     // Panggil AI
     const suggestion = await getAiSuggestion(new_menu_name, existingMenuNames);
 
+    // Check if AI detected a processed dish
+    if (suggestion.is_valid_input === false && suggestion.error_type === "processed_dish") {
+      sendLog(res, `⚠️ ${suggestion.warning}`, "warning");
+      if (suggestion.suggested_raw_ingredients && suggestion.suggested_raw_ingredients.length > 0) {
+        sendLog(res, `💡 Saran bahan mentah: ${suggestion.suggested_raw_ingredients.join(", ")}`, "info");
+      }
+      res.write(
+        `data: ${JSON.stringify({
+          type: "error",
+          error_type: "invalid_input",
+          message: suggestion.warning,
+          suggested_raw_ingredients: suggestion.suggested_raw_ingredients || [],
+        })}\n\n`
+      );
+      return res.end();
+    }
+
     if (
       !suggestion ||
       !suggestion.suggested_category ||
