@@ -1,4 +1,3 @@
-// /backend/prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,60 +5,196 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth", "public"]
 }
 
 model Bahan {
-  id        Int     @id @default(autoincrement())
-  nama      String  @unique
-  resep     Resep[]
-  energi_kkal     Float? @default(0)
-  protein_g       Float? @default(0)
-  lemak_g         Float? @default(0)
-  karbohidrat_g   Float? @default(0)
-  serat_g         Float? @default(0)
-  abu_g           Float? @default(0)
-  kalsium_mg      Float? @default(0)
-  fosfor_mg       Float? @default(0)
-  besi_mg         Float? @default(0)
-  natrium_mg      Float? @default(0)
-  kalium_mg       Float? @default(0)
-  tembaga_mg      Float? @default(0)
-  seng_mg         Float? @default(0)
-  retinol_mcg     Float? @default(0)
-  b_kar_mcg       Float? @default(0)
-  karoten_total_mcg Float? @default(0)
-  thiamin_mg      Float? @default(0)
-  riboflavin_mg   Float? @default(0)
-  niasin_mg       Float? @default(0)
-  vitamin_c_mg    Float? @default(0)
-  kelompok_makanan String? 
-  kategori_makanan String? 
-  isValidated     Boolean? @default(false)
-  validatedBy     String
-}
+  id                Int      @id @default(autoincrement())
+  nama              String   @unique
+  energi_kkal       Float?   @default(0)
+  protein_g         Float?   @default(0)
+  lemak_g           Float?   @default(0)
+  karbohidrat_g     Float?   @default(0)
+  serat_g           Float?   @default(0)
+  abu_g             Float?   @default(0)
+  kalsium_mg        Float?   @default(0)
+  fosfor_mg         Float?   @default(0)
+  besi_mg           Float?   @default(0)
+  natrium_mg        Float?   @default(0)
+  kalium_mg         Float?   @default(0)
+  tembaga_mg        Float?   @default(0)
+  seng_mg           Float?   @default(0)
+  retinol_mcg       Float?   @default(0)
+  b_kar_mcg         Float?   @default(0)
+  karoten_total_mcg Float?   @default(0)
+  thiamin_mg        Float?   @default(0)
+  riboflavin_mg     Float?   @default(0)
+  niasin_mg         Float?   @default(0)
+  vitamin_c_mg      Float?   @default(0)
+  kelompok_makanan  String?
+  kategori_makanan  String?
+  isValidated       Boolean? @default(false)
+  validatedBy       String
+  Resep             Resep[]
 
-model Menu {
-  id        Int      @id @default(autoincrement())
-  nama      String   @unique
-  kategori  String
-  resep     Resep[]
-}
-
-model Resep {
-  id        Int     @id @default(autoincrement())
-  menu_id   Int
-  bahan_id  Int
-  gramasi   Float
-  menu      Menu    @relation(fields: [menu_id], references: [id])
-  bahan     Bahan   @relation(fields: [bahan_id], references: [id])
+  @@schema("public")
 }
 
 model MealPlan {
-  id              String   @id @default(uuid())
-  name            String   
-  targetClass     Float?   @default(0)
-  recipes         String   // JSON string storing array of recipes with quantities
-  totalNutrition  String   
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id
+  name           String
+  targetClass    Float?   @default(0)
+  recipes        String
+  totalNutrition String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime
+
+  @@schema("public")
+}
+
+
+
+model Membership {
+  id            String        @id(map: "membership_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id        String        @db.Uuid
+  user_id       String        @db.Uuid
+  role_id       String?       @db.Uuid
+  status        String        @default("pending")
+  invited_by    String?       @db.Uuid
+  invite_method String        @default("request")
+  joined_at     DateTime?     @db.Timestamptz(6)
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  Organizations Organizations @relation(fields: [org_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "membership_org_id_fkey")
+  Roles         Roles?        @relation(fields: [role_id], references: [id], onUpdate: NoAction, map: "membership_role_id_fkey")
+
+  @@unique([org_id, user_id], map: "membership_org_id_user_id_key")
+  @@schema("public")
+}
+
+model Menu {
+  id       Int     @id @default(autoincrement())
+  nama     String  @unique
+  kategori String
+  Resep    Resep[]
+
+  @@schema("public")
+}
+
+
+model Organizations {
+  id          String       @id(map: "organizations_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  owner_id    String       @db.Uuid
+  invite_code String       @unique(map: "organizations_invite_code_key") @default(dbgenerated("upper(\"substring\"(md5((gen_random_uuid())::text), 1, 8))"))
+  created_at  DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime     @default(now()) @db.Timestamptz(6)
+  Membership  Membership[]
+  Roles       Roles[]
+
+  @@schema("public")
+}
+
+model Resep {
+  id       Int   @id @default(autoincrement())
+  menu_id  Int
+  bahan_id Int
+  gramasi  Float
+  Bahan    Bahan @relation(fields: [bahan_id], references: [id])
+  Menu     Menu  @relation(fields: [menu_id], references: [id])
+
+  @@schema("public")
+}
+
+model Roles {
+  id            String        @id(map: "roles_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id        String        @db.Uuid
+  name          String
+  permissions   Json          @default("{}")
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  Membership    Membership[]
+  Organizations Organizations @relation(fields: [org_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "roles_org_id_fkey")
+
+  @@schema("public")
+}
+
+
+model Userext {
+  id         String   @id(map: "userext_pkey") @db.Uuid
+  full_name  String?
+  phone      String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("public")
+}
+
+enum aal_level {
+  aal1
+  aal2
+  aal3
+
+  @@schema("auth")
+}
+
+enum code_challenge_method {
+  s256
+  plain
+
+  @@schema("auth")
+}
+
+enum factor_status {
+  unverified
+  verified
+
+  @@schema("auth")
+}
+
+enum factor_type {
+  totp
+  webauthn
+  phone
+
+  @@schema("auth")
+}
+
+enum oauth_authorization_status {
+  pending
+  approved
+  denied
+  expired
+
+  @@schema("auth")
+}
+
+enum oauth_client_type {
+  public
+  confidential
+
+  @@schema("auth")
+}
+
+enum oauth_registration_type {
+  dynamic
+  manual
+
+  @@schema("auth")
+}
+
+enum oauth_response_type {
+  code
+
+  @@schema("auth")
+}
+
+enum one_time_token_type {
+  confirmation_token
+  reauthentication_token
+  recovery_token
+  email_change_token_new
+  email_change_token_current
+  phone_change_token
+
+  @@schema("auth")
 }
