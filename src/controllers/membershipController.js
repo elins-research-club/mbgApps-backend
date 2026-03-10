@@ -82,7 +82,7 @@ async function requestToJoinByCode(userId, inviteCode) {
   // Resolve org from invite code
   const org = await prisma.organizations.findUnique({
     where: { invite_code: inviteCode.trim().toUpperCase() },
-    select: { id: true, name: true },
+    select: { id: true, name: true, parent_id: true, depth: true },
   });
   
   if (!org) throw new Error("Kode undangan tidak valid");
@@ -129,6 +129,8 @@ async function requestToJoinByCode(userId, inviteCode) {
     org: {
       id: org.id,
       name: org.name,
+      parent_id: org.parent_id,
+      depth: org.depth,
     },
   };
 }

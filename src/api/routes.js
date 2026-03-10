@@ -33,12 +33,28 @@ const {
 const {
   getAllRecommendationHandler,
 } = require("../controllers/recommendationSystemController");
-const { createOrganization, getOrganization, updateOrganization } = require("../controllers/organizationController");
+const {
+  ApiError,
+  createOrganization,
+  createSubOrganization,
+  getOrganization,
+  getSubOrganizations,
+  updateOrganization,
+} = require("../controllers/organizationController");
 const { getOrgMembers, requestToJoinByCode, acceptMember, rejectMember, removeMember, assignRole } = require("../controllers/membershipController");
 const { getOrgRoles, createRole, updateRole, deleteRole } = require("../controllers/roleController");
 const { updateProfile } = require("../controllers/userController");
 const { requireAuth } = require("../middleware/auth");
 const router = express.Router();
+
+function sendError(res, error, fallbackStatus = 400) {
+  if (error instanceof ApiError) {
+    return res.status(error.status).json({ error: error.message });
+  }
+
+  const status = typeof error?.status === "number" ? error.status : fallbackStatus;
+  return res.status(status).json({ error: error.message });
+}
 
 router.get("/menus", getMenus);
 router.post("/generate", generateNutrition);
@@ -73,7 +89,16 @@ router.post("/organizations", requireAuth, async (req, res) => {
     const org = await createOrganization(req.userId, req.body);
     res.json(org);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    sendError(res, error, 400);
+  }
+});
+
+router.post("/organizations/:parentOrgId/sub-organizations", requireAuth, async (req, res) => {
+  try {
+    const result = await createSubOrganization(req.userId, req.params.parentOrgId, req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    sendError(res, error, 400);
   }
 });
 
@@ -82,15 +107,25 @@ router.get("/organizations/:id", async (req, res) => {
     const org = await getOrganization(req.params.id);
     res.json(org);
   } catch (error) {
-    res.status(404).json({ error: error.message });
+    sendError(res, error, 404);
   }
 });
+
+router.get("/organizations/:id/sub-organizations", async (req, res) => {
+  try {
+    const result = await getSubOrganizations(req.params.id);
+    res.json(result);
+  } catch (error) {
+    sendError(res, error, 404);
+  }
+});
+
 router.put("/organizations/:id", async (req, res) => {
   try {
     const org = await updateOrganization(req.params.id, req.body);
     res.json(org);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    sendError(res, error, 400);
   }
 });
 
