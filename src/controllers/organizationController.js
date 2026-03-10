@@ -1,5 +1,5 @@
-const { PrismaClient, Prisma } = require("@prisma/client");
-const prisma = new PrismaClient();
+const { Prisma } = require("@prisma/client");
+const prisma = require("../lib/prisma");
 
 class ApiError extends Error {
   constructor(status, message) {

@@ -1,8 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const csv = require("csv-parser");
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
+const prisma = require("../lib/prisma");
 const { determineCategory } = require("../controllers/foodCategorization");
 // KAMUS ALIAS BAHAN
 const stillMissing = [

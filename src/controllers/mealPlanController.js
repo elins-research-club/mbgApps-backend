@@ -1,7 +1,6 @@
-const { PrismaClient } = require("@prisma/client");
 const { randomUUID } = require("crypto");
 
-const prisma = new PrismaClient();
+const prisma = require("../lib/prisma");
 
 const saveMealPlan = async (req, res) => {
   try {
