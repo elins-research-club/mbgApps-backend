@@ -2195,9 +2195,9 @@ const getAllRecipes = async (req, res) => {
     // Query all recipes/menus from database with ingredients
     const menus = await prisma.menu.findMany({
       include: {
-        resep: {
+        Resep: {
           include: {
-            bahan: true,
+            Bahan: true,
           },
         },
       },
@@ -2234,20 +2234,20 @@ const getAllRecipes = async (req, res) => {
       nutrisiKeys.forEach((key) => (totalNutrisi[key] = 0));
       let totalGramasi = 0;
 
-      const rincianBahan = menu.resep.map((r) => {
+      const rincianBahan = menu.Resep.map((r) => {
         const ratio = r.gramasi / 100;
         totalGramasi += r.gramasi;
         const bahanNutrisi = {};
 
         nutrisiKeys.forEach((key) => {
-          const val = (r.bahan[key] || 0) * ratio;
+          const val = (r.Bahan[key] || 0) * ratio;
           totalNutrisi[key] += val;
           bahanNutrisi[key] = parseFloat(val.toFixed(2));
         });
 
         return {
           id: r.id,
-          nama: r.bahan.nama,
+          nama: r.Bahan.nama,
           gramasi: r.gramasi,
           nutrisi: bahanNutrisi,
         };

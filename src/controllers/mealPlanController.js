@@ -1,14 +1,17 @@
 const { PrismaClient } = require("@prisma/client");
+const { randomUUID } = require("crypto");
+
 const prisma = new PrismaClient();
+
 const saveMealPlan = async (req, res) => {
   try {
     const { name, targetClass, recipes, totalNutrition } = req.body;
 
     // Validate required fields
-    if (!targetClass || !recipes || !totalNutrition) {
+    if (!name || targetClass === undefined || !recipes || !totalNutrition) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: targetClass, recipes, or totalNutrition",
+        message: "Missing required fields: name, targetClass, recipes, or totalNutrition",
       });
     }
 
@@ -20,13 +23,17 @@ const saveMealPlan = async (req, res) => {
       });
     }
 
-    // Create the meal plan
+    const now = new Date();
+
+    // Create the meal plan with required schema fields
     const mealPlan = await prisma.mealPlan.create({
       data: {
+        id: randomUUID(),
         name,
         targetClass,
         recipes: JSON.stringify(recipes),
         totalNutrition: JSON.stringify(totalNutrition),
+        updatedAt: now,
       },
     });
 
