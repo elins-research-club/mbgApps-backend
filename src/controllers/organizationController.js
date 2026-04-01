@@ -26,6 +26,10 @@ function mapOrganization(organization) {
     ownerId: organization.owner_id,
     invite_code: organization.invite_code,
     inviteCode: organization.invite_code,
+    status: organization.status,
+    approvedBy: organization.approved_by,
+    approvedAt: organization.approved_at,
+    rejectionReason: organization.rejection_reason,
     createdAt: organization.created_at,
     updatedAt: organization.updated_at,
   };
@@ -82,14 +86,29 @@ async function createOrganization(userId, { name, description }) {
   const normalizedName = typeof name === "string" ? name.trim() : "";
   if (!normalizedName) throw new ApiError(422, "Organization name is required");
 
-  const organization = await prisma.organizations.create({
-    data: {
-      name: normalizedName,
-      description: normalizeDescription(description),
-      owner_id: userId,
-      parent_id: null,
-      depth: 0,
-    },
+  const organization = await prisma.$transaction(async (tx) => {
+    const org = await tx.organizations.create({
+      data: {
+        name: normalizedName,
+        description: normalizeDescription(description),
+        owner_id: userId,
+        parent_id: null,
+        depth: 0,
+        status: "pending",
+      },
+    });
+
+    // Auto-create membership for the owner with pending status
+    await tx.membership.create({
+      data: {
+        org_id: org.id,
+        user_id: userId,
+        status: "pending",
+        invite_method: "owner",
+      },
+    });
+
+    return org;
   });
 
   return mapOrganization(organization);
@@ -181,7 +200,156 @@ async function updateOrganization(orgId, { name, description }) {
     }
     throw error;
   }
-  
+
+  return mapOrganization(organization);
+}
+
+/**
+ * Approve an organization (super admin only)
+ */
+async function approveOrganization(orgId, adminUserId) {
+  const organization = await prisma.$transaction(async (tx) => {
+    const org = await tx.organizations.update({
+      where: { id: orgId },
+      data: {
+        status: "active",
+        approved_by: adminUserId,
+        approved_at: new Date(),
+        rejection_reason: null,
+      },
+    });
+
+    // Auto-approve the owner's membership
+    await tx.membership.updateMany({
+      where: {
+        org_id: orgId,
+        user_id: org.owner_id,
+        status: "pending",
+      },
+      data: {
+        status: "active",
+        joined_at: new Date(),
+      },
+    });
+
+    return org;
+  });
+
+  if (!organization) {
+    throw new ApiError(404, "Organization not found");
+  }
+
+  return mapOrganization(organization);
+}
+
+/**
+ * Reject an organization (super admin only)
+ */
+async function rejectOrganization(orgId, adminUserId, reason) {
+  const organization = await prisma.organizations.update({
+    where: { id: orgId },
+    data: {
+      status: "rejected",
+      approved_by: adminUserId,
+      approved_at: new Date(),
+      rejection_reason: reason || null,
+    },
+  });
+
+  if (!organization) {
+    throw new ApiError(404, "Organization not found");
+  }
+
+  return mapOrganization(organization);
+}
+
+/**
+ * Get all organizations with optional filtering
+ */
+async function getAllOrganizations(query = {}) {
+  const { status, page = 1, limit = 50 } = query;
+
+  const where = {};
+  if (status) {
+    where.status = status;
+  }
+
+  const skip = (page - 1) * limit;
+
+  const [organizations, total] = await Promise.all([
+    prisma.organizations.findMany({
+      where,
+      orderBy: { created_at: "desc" },
+      skip,
+      take: parseInt(limit, 10),
+    }),
+    prisma.organizations.count({ where }),
+  ]);
+
+  return {
+    data: organizations.map(mapOrganization),
+    pagination: {
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      total,
+      totalPages: Math.ceil(total / parseInt(limit, 10)),
+    },
+  };
+}
+
+/**
+ * Get pending organizations for super admin review
+ */
+async function getPendingOrganizations() {
+  const organizations = await prisma.organizations.findMany({
+    where: { status: "pending" },
+    orderBy: { created_at: "desc" },
+  });
+
+  return organizations.map(mapOrganization);
+}
+
+/**
+ * Suspend an organization (super admin only)
+ */
+async function suspendOrganization(orgId, adminUserId, reason, suspendedUntil) {
+  const organization = await prisma.organizations.update({
+    where: { id: orgId },
+    data: {
+      status: "suspended",
+      approved_by: adminUserId,
+      approved_at: new Date(),
+      rejection_reason: reason,
+      suspension_reason: reason,
+      suspended_until: suspendedUntil ? new Date(suspendedUntil) : null,
+    },
+  });
+
+  if (!organization) {
+    throw new ApiError(404, "Organization not found");
+  }
+
+  return mapOrganization(organization);
+}
+
+/**
+ * Unsuspend an organization (super admin only)
+ */
+async function unsuspendOrganization(orgId) {
+  const organization = await prisma.organizations.update({
+    where: { id: orgId },
+    data: {
+      status: "active",
+      rejection_reason: null,
+      suspension_reason: null,
+      suspended_until: null,
+    },
+  });
+
+  if (!organization) {
+    throw new ApiError(404, "Organization not found");
+  }
+
   return mapOrganization(organization);
 }
 
@@ -192,4 +360,10 @@ module.exports = {
   getOrganization,
   getSubOrganizations,
   updateOrganization,
+  approveOrganization,
+  rejectOrganization,
+  getAllOrganizations,
+  getPendingOrganizations,
+  suspendOrganization,
+  unsuspendOrganization,
 };
