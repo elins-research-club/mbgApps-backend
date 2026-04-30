@@ -1199,7 +1199,7 @@ async function getRecipeNutritionById(req, res) {
     const recipes = await prisma.resep.findMany({
       where: { menu_id: parseInt(recipeId) },
       include: {
-        bahan: true,
+        Bahan: true,
       },
     });
 
@@ -1240,48 +1240,48 @@ async function getRecipeNutritionById(req, res) {
     const detailBahanForLp = {};
 
     recipes.forEach((resep) => {
-      const { gramasi, bahan } = resep;
-      if (!bahan) return;
+      const { gramasi, Bahan } = resep;
+      if (!Bahan) return;
 
       totalGramasi += gramasi;
       const ratio = gramasi / 100;
       const giziBahanIni = {};
 
       for (const key in totalGizi) {
-        if (bahan[key] !== null && bahan[key] !== undefined) {
-          const nilaiGiziBahan = (bahan[key] || 0) * ratio;
+        if (Bahan[key] !== null && Bahan[key] !== undefined) {
+          const nilaiGiziBahan = (Bahan[key] || 0) * ratio;
           totalGizi[key] += nilaiGiziBahan;
           giziBahanIni[key] = parseFloat(nilaiGiziBahan.toFixed(2));
         }
       }
 
       detailBahan.push({
-        id: bahan.id,
-        nama: bahan.nama,
+        id: Bahan.id,
+        nama: Bahan.nama,
         gramasi: gramasi,
-        isValidated: bahan.isValidated,
-        validatedBy: bahan.validatedBy,
+        isValidated: Bahan.isValidated,
+        validatedBy: Bahan.validatedBy,
         gizi: giziBahanIni,
-        kategori_makanan: bahan.kategori_makanan,
+        kategori_makanan: Bahan.kategori_makanan,
       });
 
       // tandain
       console.log("hi");
-      console.log("kelmakanan", bahan.kelompok_makanan);
+      console.log("kelmakanan", Bahan.kelompok_makanan);
       console.log(
         "debugging",
-        ["Bumbu", "Gula"].includes(bahan.kelompok_makanan),
+        ["Bumbu", "Gula"].includes(Bahan.kelompok_makanan),
       );
-      if (!["Bumbu", "Gula"].includes(bahan.kelompok_makanan)) {
-        detailBahanForLp[bahan.nama] = {
+      if (!["Bumbu", "Gula"].includes(Bahan.kelompok_makanan)) {
+        detailBahanForLp[Bahan.nama] = {
           gramasi: gramasi,
-          kategori_makanan: bahan.kategori_makanan,
+          kategori_makanan: Bahan.kategori_makanan,
           ...giziBahanIni,
         };
       }
 
       console.log(
-        `  - ${bahan.nama}: ${gramasi}g (${(bahan.energi_kkal * ratio).toFixed(
+        `  - ${Bahan.nama}: ${gramasi}g (${(Bahan.energi_kkal * ratio).toFixed(
           1,
         )} kkal)`,
       );
