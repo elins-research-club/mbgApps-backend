@@ -14,6 +14,15 @@ function normalizeDescription(description) {
   return trimmed.length ? trimmed : null;
 }
 
+function isUuid(value) {
+  return (
+    typeof value === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value.trim(),
+    )
+  );
+}
+
 function mapOrganization(organization) {
   return {
     id: organization.id,
@@ -117,6 +126,10 @@ async function createOrganization(userId, { name, description }) {
 async function createSubOrganization(userId, parentOrgId, { name, description }) {
   if (!userId) throw new ApiError(401, "Not authenticated");
 
+  if (!isUuid(parentOrgId)) {
+    throw new ApiError(422, "Invalid parent organization ID");
+  }
+
   const normalizedName = typeof name === "string" ? name.trim() : "";
   if (!normalizedName) {
     throw new ApiError(422, "Organization name is required");
@@ -143,15 +156,30 @@ async function createSubOrganization(userId, parentOrgId, { name, description })
       throw new ApiError(409, "Sub-organization depth limit reached (max 2)");
     }
 
-    return tx.organizations.create({
+    const organization = await tx.organizations.create({
       data: {
         name: normalizedName,
         description: normalizeDescription(description),
         owner_id: userId,
         parent_id: parentOrg.id,
         depth: newDepth,
+        status: "active",
+        approved_at: new Date(),
+        approved_by: userId,
       },
     });
+
+    await tx.membership.create({
+      data: {
+        org_id: organization.id,
+        user_id: userId,
+        status: "active",
+        invite_method: "owner",
+        joined_at: new Date(),
+      },
+    });
+
+    return organization;
   });
 
   return { organization: mapOrganization(organization) };
