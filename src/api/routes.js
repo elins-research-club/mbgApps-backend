@@ -47,13 +47,42 @@ const {
   suspendOrganization,
   unsuspendOrganization,
 } = require("../controllers/organizationController");
-const { getOrgMembers, requestToJoinByCode, acceptMember, rejectMember, removeMember, assignRole } = require("../controllers/membershipController");
-const { getOrgRoles, createRole, updateRole, deleteRole } = require("../controllers/roleController");
+const {
+  getOrgMembers,
+  requestToJoinByCode,
+  acceptMember,
+  rejectMember,
+  removeMember,
+  assignRole,
+} = require("../controllers/membershipController");
+const {
+  getOrgRoles,
+  createRole,
+  updateRole,
+  deleteRole,
+} = require("../controllers/roleController");
 const { updateProfile } = require("../controllers/userController");
-const { getAllUsers, approveUser, rejectUser, updateUserRole, deleteUser } = require("../controllers/adminController");
-const { signUp, signIn, signOut, adminSignIn, verifyAdmin, requireSuperAdminMiddleware } = require("../controllers/authController");
+const {
+  getAllUsers,
+  approveUser,
+  rejectUser,
+  updateUserRole,
+  deleteUser,
+} = require("../controllers/adminController");
+const {
+  signUp,
+  signIn,
+  signOut,
+  adminSignIn,
+  verifyAdmin,
+  requireSuperAdminMiddleware,
+} = require("../controllers/authController");
 const { requireAuth } = require("../middleware/auth");
 const { requireApprovedOrg } = require("../middleware/orgApproval");
+const {
+  totalIngredients,
+  calculateTotalIngridients,
+} = require("../controllers/totalIngredientsController");
 const router = express.Router();
 
 function sendError(res, error, fallbackStatus = 400) {
@@ -61,7 +90,8 @@ function sendError(res, error, fallbackStatus = 400) {
     return res.status(error.status).json({ error: error.message });
   }
 
-  const status = typeof error?.status === "number" ? error.status : fallbackStatus;
+  const status =
+    typeof error?.status === "number" ? error.status : fallbackStatus;
   return res.status(status).json({ error: error.message });
 }
 
@@ -84,72 +114,100 @@ router.get("/admin/users", requireSuperAdminMiddleware, async (req, res) => {
   }
 });
 
-router.post("/admin/users/:id/approve", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const user = await approveUser(req.params.id);
-    res.json(user);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+router.post(
+  "/admin/users/:id/approve",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const user = await approveUser(req.params.id);
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+);
 
-router.post("/admin/users/:id/reject", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const { reason } = req.body;
-    const user = await rejectUser(req.params.id, reason);
-    res.json(user);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+router.post(
+  "/admin/users/:id/reject",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const { reason } = req.body;
+      const user = await rejectUser(req.params.id, reason);
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+);
 
-router.put("/admin/users/:id/role", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const { roleId } = req.body;
-    const user = await updateUserRole(req.params.id, roleId);
-    res.json(user);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+router.put(
+  "/admin/users/:id/role",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const { roleId } = req.body;
+      const user = await updateUserRole(req.params.id, roleId);
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+);
 
-router.delete("/admin/users/:id", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const result = await deleteUser(req.params.id);
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+router.delete(
+  "/admin/users/:id",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const result = await deleteUser(req.params.id);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+);
 
 // Organization approval routes (protected)
-router.get("/organizations/pending", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const organizations = await getPendingOrganizations();
-    res.json(organizations);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.get(
+  "/organizations/pending",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const organizations = await getPendingOrganizations();
+      res.json(organizations);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
-router.post("/organizations/:id/approve", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const org = await approveOrganization(req.params.id, req.userId);
-    res.json(org);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.post(
+  "/organizations/:id/approve",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const org = await approveOrganization(req.params.id, req.userId);
+      res.json(org);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
-router.post("/organizations/:id/reject", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const { reason } = req.body;
-    const org = await rejectOrganization(req.params.id, req.userId, reason);
-    res.json(org);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.post(
+  "/organizations/:id/reject",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const { reason } = req.body;
+      const org = await rejectOrganization(req.params.id, req.userId, reason);
+      res.json(org);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
 router.get("/menus", getMenus);
 router.post("/generate", generateNutrition);
@@ -177,7 +235,6 @@ router.get("/meal-plans", getAllMealPlans);
 router.get("/meal-plans/:id", getMealPlanById);
 router.delete("/meal-plans/:id", requireAuth, requireApprovedOrg, deleteMealPlan);
 
-
 // Organization routes
 router.post("/organizations", requireAuth, async (req, res) => {
   try {
@@ -188,14 +245,22 @@ router.post("/organizations", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/organizations/:parentOrgId/sub-organizations", requireAuth, async (req, res) => {
-  try {
-    const result = await createSubOrganization(req.userId, req.params.parentOrgId, req.body);
-    res.status(201).json(result);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.post(
+  "/organizations/:parentOrgId/sub-organizations",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const result = await createSubOrganization(
+        req.userId,
+        req.params.parentOrgId,
+        req.body,
+      );
+      res.status(201).json(result);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
 router.get("/organizations", async (req, res) => {
   try {
@@ -206,52 +271,77 @@ router.get("/organizations", async (req, res) => {
   }
 });
 
-router.get("/organizations/pending", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const organizations = await getPendingOrganizations();
-    res.json(organizations);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.get(
+  "/organizations/pending",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const organizations = await getPendingOrganizations();
+      res.json(organizations);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
-router.post("/organizations/:id/approve", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const org = await approveOrganization(req.params.id, req.userId);
-    res.json(org);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.post(
+  "/organizations/:id/approve",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const org = await approveOrganization(req.params.id, req.userId);
+      res.json(org);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
-router.post("/organizations/:id/reject", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const { reason } = req.body;
-    const org = await rejectOrganization(req.params.id, req.userId, reason);
-    res.json(org);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.post(
+  "/organizations/:id/reject",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const { reason } = req.body;
+      const org = await rejectOrganization(req.params.id, req.userId, reason);
+      res.json(org);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
-router.post("/organizations/:id/suspend", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const { reason, suspendedUntil } = req.body;
-    const org = await suspendOrganization(req.params.id, req.userId, reason, suspendedUntil);
-    res.json(org);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.post(
+  "/organizations/:id/suspend",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const { reason, suspendedUntil } = req.body;
+      const org = await suspendOrganization(
+        req.params.id,
+        req.userId,
+        reason,
+        suspendedUntil,
+      );
+      res.json(org);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
-router.post("/organizations/:id/unsuspend", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const org = await unsuspendOrganization(req.params.id);
-    res.json(org);
-  } catch (error) {
-    sendError(res, error, 400);
-  }
-});
+router.post(
+  "/organizations/:id/unsuspend",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const org = await unsuspendOrganization(req.params.id);
+      res.json(org);
+    } catch (error) {
+      sendError(res, error, 400);
+    }
+  },
+);
 
 router.get("/organizations/:id", async (req, res) => {
   try {
@@ -384,38 +474,64 @@ router.get("/admin/users", requireSuperAdminMiddleware, async (req, res) => {
   }
 });
 
-router.post("/admin/users/:id/approve", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const user = await approveUser(req.params.id);
-    res.json(user);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+router.post(
+  "/admin/users/:id/approve",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const user = await approveUser(req.params.id);
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+);
 
-router.post("/admin/users/:id/reject", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const { reason } = req.body;
-    const user = await rejectUser(req.params.id, reason);
-    res.json(user);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+router.post(
+  "/admin/users/:id/reject",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const { reason } = req.body;
+      const user = await rejectUser(req.params.id, reason);
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+);
 
-router.put("/admin/users/:id/role", requireSuperAdminMiddleware, async (req, res) => {
-  try {
-    const { roleId } = req.body;
-    const user = await updateUserRole(req.params.id, roleId);
-    res.json(user);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+router.put(
+  "/admin/users/:id/role",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const { roleId } = req.body;
+      const user = await updateUserRole(req.params.id, roleId);
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+);
 
-router.delete("/admin/users/:id", requireSuperAdminMiddleware, async (req, res) => {
+router.delete(
+  "/admin/users/:id",
+  requireSuperAdminMiddleware,
+  async (req, res) => {
+    try {
+      const result = await deleteUser(req.params.id);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+);
+
+router.post("/generate-total-ingredients", requireAuth, async (req, res) => {
   try {
-    const result = await deleteUser(req.params.id);
+    const { plateRecipes, portion } = req.body;
+    const result = await calculateTotalIngridients(plateRecipes, portion);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });

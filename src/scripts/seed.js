@@ -284,74 +284,127 @@ async function seedMealPlan() {
   const records = await processCsv(filePath, { headers: true });
 
   let totalMealPlansCreated = 0;
-  let totalBahanLinked = 0;
 
   for (const row of records) {
     const menuName = cleanString(row["MENU NO"] || "");
     if (!menuName || !menuName.match(/^Menu \d+$/i)) continue;
 
-    // Collect the 5 dish names from the row
-    const recipeNames = [
-      cleanString(row["KARBOHIDRAT (100gr)"] || ""),
-      cleanString(row["PROTEIN HEWANI (100gr)"] || ""),
-      cleanString(row["SAYURAN (50gr)"] || ""),
-      cleanString(row["PROTEIN TAMBAHAN (40gr)"] || ""),
-      cleanString(row["BUAH (100gr)"] || ""),
-    ].filter(Boolean);
+    const columnMap = [
+      { col: "KARBOHIDRAT (100gr)", kategori: "karbohidrat" },
+      { col: "PROTEIN HEWANI (100gr)", kategori: "proteinHewani" },
+      { col: "SAYURAN (50gr)", kategori: "sayuran" },
+      { col: "PROTEIN TAMBAHAN (40gr)", kategori: "proteinTambahan" },
+      { col: "BUAH (100gr)", kategori: "buah" },
+    ];
 
     console.log(`\n  📦 ${menuName}:`);
 
     const resolvedRecipes = [];
-    const totalNutrition = { energi: 0, protein: 0, lemak: 0, karbohidrat: 0 };
+    const totalNutrition = {
+      energi_kkal: 0,
+      protein_g: 0,
+      lemak_g: 0,
+      karbohidrat_g: 0,
+      serat_g: 0,
+      abu_g: 0,
+      kalsium_mg: 0,
+      fosfor_mg: 0,
+      besi_mg: 0,
+      natrium_mg: 0,
+      kalium_mg: 0,
+      tembaga_mg: 0,
+      seng_mg: 0,
+      retinol_mcg: 0,
+      b_kar_mcg: 0,
+      karoten_total_mcg: 0,
+      thiamin_mg: 0,
+      riboflavin_mg: 0,
+      niasin_mg: 0,
+      vitamin_c_mg: 0,
+    };
 
-    for (const recipeName of recipeNames) {
+    for (const { col, kategori } of columnMap) {
+      const recipeName = cleanString(row[col] || "");
+      if (!recipeName) continue;
+
       const recipeMenu = await prisma.menu.findUnique({
         where: { nama: recipeName },
       });
 
-      if (recipeMenu) {
-        const resepEntries = await prisma.resep.findMany({
-          where: { menu_id: recipeMenu.id },
-          include: { Bahan: true },
+      if (!recipeMenu) {
+        console.log(`    ⚠️  Tidak ditemukan: ${recipeName}`);
+        continue;
+      }
+
+      const resepEntries = await prisma.resep.findMany({
+        where: { menu_id: recipeMenu.id },
+        include: { Bahan: true },
+      });
+
+      // Build nutrisi for this menu (sum of all bahan)
+      const menuNutrisi = { ...totalNutrition }; // start zeroed
+      Object.keys(menuNutrisi).forEach((k) => (menuNutrisi[k] = 0));
+
+      const rincian_bahan = resepEntries.map((entry) => {
+        const factor = entry.gramasi / 100;
+        const bahanNutrisi = {};
+
+        Object.keys(totalNutrition).forEach((key) => {
+          const val = (entry.Bahan[key] ?? 0) * factor;
+          bahanNutrisi[key] = Math.round(val * 100) / 100;
+          menuNutrisi[key] += val;
         });
 
-        for (const entry of resepEntries) {
-          const factor = entry.gramasi / 100;
-          totalNutrition.energi += (entry.Bahan.energi_kkal ?? 0) * factor;
-          totalNutrition.protein += (entry.Bahan.protein_g ?? 0) * factor;
-          totalNutrition.lemak += (entry.Bahan.lemak_g ?? 0) * factor;
-          totalNutrition.karbohidrat +=
-            (entry.Bahan.karbohidrat_g ?? 0) * factor;
-          totalBahanLinked++;
-        }
+        return {
+          id: entry.Bahan.id,
+          nama: entry.Bahan.nama,
+          gramasi: entry.gramasi,
+          nutrisi: bahanNutrisi,
+        };
+      });
 
-        resolvedRecipes.push(recipeMenu.id);
-        console.log(`    ✓ ${recipeName}: ${resepEntries.length} bahan`);
-      } else {
-        console.log(`    ⚠️  Resep tidak ditemukan di DB: ${recipeName}`);
-      }
+      // Round menuNutrisi
+      Object.keys(menuNutrisi).forEach((k) => {
+        menuNutrisi[k] = Math.round(menuNutrisi[k] * 100) / 100;
+      });
+
+      // Accumulate into totalNutrition
+      Object.keys(totalNutrition).forEach((k) => {
+        totalNutrition[k] += menuNutrisi[k];
+      });
+
+      const total_gramasi = resepEntries.reduce((sum, e) => sum + e.gramasi, 0);
+
+      resolvedRecipes.push({
+        id: recipeMenu.id,
+        nama: recipeMenu.nama,
+        kategori,
+        nutrisi: menuNutrisi,
+        rincian_bahan,
+        total_gramasi,
+      });
+
+      console.log(`    ✓ ${recipeName}: ${resepEntries.length} bahan`);
     }
 
-    const roundedNutrition = {
-      energi: Math.round(totalNutrition.energi * 10) / 10,
-      protein: Math.round(totalNutrition.protein * 10) / 10,
-      lemak: Math.round(totalNutrition.lemak * 10) / 10,
-      karbohidrat: Math.round(totalNutrition.karbohidrat * 10) / 10,
-    };
+    // Round totalNutrition
+    Object.keys(totalNutrition).forEach((k) => {
+      totalNutrition[k] = Math.round(totalNutrition[k] * 100) / 100;
+    });
 
     await prisma.mealPlan.upsert({
       where: { id: menuName },
       update: {
         name: menuName,
         recipes: JSON.stringify(resolvedRecipes),
-        totalNutrition: JSON.stringify(roundedNutrition),
+        totalNutrition: JSON.stringify(totalNutrition),
         updatedAt: new Date(),
       },
       create: {
         id: menuName,
         name: menuName,
         recipes: JSON.stringify(resolvedRecipes),
-        totalNutrition: JSON.stringify(roundedNutrition),
+        totalNutrition: JSON.stringify(totalNutrition),
         updatedAt: new Date(),
       },
     });
@@ -359,9 +412,7 @@ async function seedMealPlan() {
     totalMealPlansCreated++;
   }
 
-  console.log(
-    `\n✅ ${totalMealPlansCreated} meal plan dibuat, ${totalBahanLinked} total bahan diproses.`,
-  );
+  console.log(`\n✅ ${totalMealPlansCreated} meal plan dibuat.`);
 }
 
 async function seedResep() {
