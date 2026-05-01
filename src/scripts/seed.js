@@ -275,117 +275,93 @@ function determineMenuCategory(recipeFileName) {
   if (recipeFileName.includes("sayuran")) return "sayur";
   if (recipeFileName.includes("protein-tambahan")) return "proteinTambahan";
   if (recipeFileName.includes("buahSusu")) return "buah";
-  return "karbohidrat"; 
+  return "karbohidrat";
 }
 
 async function seedMealPlan() {
-  console.log("🍽 Tahap 4: Membuat meal plan dari menu.csv...");
-  const filePath = path.join(__dirname, "../data/csv/menu.csv");
-  const records = await processCsv(filePath, { headers: false });
-  const menus = {};
-  let currentMenuHeaders = [];
-  let categoryIndex = 0;
-  for (const row of records) {
-    const values = Object.values(row);
-    const fullLine = values.join(",");
-    const hasMenuHeader = values.some(
-      (v) => typeof v === "string" && v.trim().match(/^MENU \d+$/)
-    );
-    if (hasMenuHeader) {
-      currentMenuHeaders = [];
-      for (let i = 0; i < values.length; i++) {
-        const val = (values[i] || "").trim();
-        if (val.match(/^MENU \d+$/)) {
-          const menuName = cleanString(val);
-          currentMenuHeaders.push({ colIndex: i, menuName });
-          if (!menus[menuName]) menus[menuName] = [];
-        }
-      }
-      categoryIndex = 0;
-      continue;
-    }
-    if (
-      fullLine.replace(/,/g, "").trim() === "" ||
-      fullLine.includes("SPESIFIKASI")
-    ) {
-      continue;
-    }
-    if (currentMenuHeaders.length > 0 && categoryIndex < 5) {
-      for (const { colIndex, menuName } of currentMenuHeaders) {
-        const recipeName = cleanString(row[String(colIndex)] || "");
-        if (recipeName) {
-          menus[menuName].push(recipeName);
-        }
-      }
-      categoryIndex++;
-    }
-  }
+  console.log("🍽 Seeding meal plans dari menu_catering.csv...");
+  const filePath = path.join(__dirname, "../data/csv/menu_catering.csv");
+  const records = await processCsv(filePath, { headers: true });
+
   let totalMealPlansCreated = 0;
   let totalBahanLinked = 0;
-  for (const [menuName, recipeNames] of Object.entries(menus)) {
+
+  for (const row of records) {
+    const menuName = cleanString(row["MENU NO"] || "");
+    if (!menuName || !menuName.match(/^Menu \d+$/i)) continue;
+
+    // Collect the 5 dish names from the row
+    const recipeNames = [
+      cleanString(row["KARBOHIDRAT (100gr)"] || ""),
+      cleanString(row["PROTEIN HEWANI (100gr)"] || ""),
+      cleanString(row["SAYURAN (50gr)"] || ""),
+      cleanString(row["PROTEIN TAMBAHAN (40gr)"] || ""),
+      cleanString(row["BUAH (100gr)"] || ""),
+    ].filter(Boolean);
+
     console.log(`\n  📦 ${menuName}:`);
+
     const resolvedRecipes = [];
-    const totalNutrition = {
-      energi: 0,
-      protein: 0,
-      lemak: 0,
-      karbohidrat: 0,
-    };
+    const totalNutrition = { energi: 0, protein: 0, lemak: 0, karbohidrat: 0 };
+
     for (const recipeName of recipeNames) {
       const recipeMenu = await prisma.menu.findUnique({
         where: { nama: recipeName },
       });
+
       if (recipeMenu) {
         const resepEntries = await prisma.resep.findMany({
           where: { menu_id: recipeMenu.id },
           include: { Bahan: true },
         });
+
         for (const entry of resepEntries) {
           const factor = entry.gramasi / 100;
-          totalNutrition.energi      += (entry.Bahan.energi_kkal    ?? 0) * factor;
-          totalNutrition.protein     += (entry.Bahan.protein_g      ?? 0) * factor;
-          totalNutrition.lemak       += (entry.Bahan.lemak_g        ?? 0) * factor;
-          totalNutrition.karbohidrat += (entry.Bahan.karbohidrat_g  ?? 0) * factor;
+          totalNutrition.energi += (entry.Bahan.energi_kkal ?? 0) * factor;
+          totalNutrition.protein += (entry.Bahan.protein_g ?? 0) * factor;
+          totalNutrition.lemak += (entry.Bahan.lemak_g ?? 0) * factor;
+          totalNutrition.karbohidrat +=
+            (entry.Bahan.karbohidrat_g ?? 0) * factor;
           totalBahanLinked++;
         }
+
         resolvedRecipes.push(recipeMenu.id);
         console.log(`    ✓ ${recipeName}: ${resepEntries.length} bahan`);
       } else {
         console.log(`    ⚠️  Resep tidak ditemukan di DB: ${recipeName}`);
       }
     }
+
+    const roundedNutrition = {
+      energi: Math.round(totalNutrition.energi * 10) / 10,
+      protein: Math.round(totalNutrition.protein * 10) / 10,
+      lemak: Math.round(totalNutrition.lemak * 10) / 10,
+      karbohidrat: Math.round(totalNutrition.karbohidrat * 10) / 10,
+    };
+
     await prisma.mealPlan.upsert({
       where: { id: menuName },
       update: {
         name: menuName,
         recipes: JSON.stringify(resolvedRecipes),
-        totalNutrition: JSON.stringify({
-          energi:      Math.round(totalNutrition.energi      * 10) / 10,
-          protein:     Math.round(totalNutrition.protein     * 10) / 10,
-          lemak:       Math.round(totalNutrition.lemak       * 10) / 10,
-          karbohidrat: Math.round(totalNutrition.karbohidrat * 10) / 10,
-        }),
+        totalNutrition: JSON.stringify(roundedNutrition),
         updatedAt: new Date(),
       },
       create: {
         id: menuName,
         name: menuName,
         recipes: JSON.stringify(resolvedRecipes),
-        totalNutrition: JSON.stringify({
-          energi:      Math.round(totalNutrition.energi      * 10) / 10,
-          protein:     Math.round(totalNutrition.protein     * 10) / 10,
-          lemak:       Math.round(totalNutrition.lemak       * 10) / 10,
-          karbohidrat: Math.round(totalNutrition.karbohidrat * 10) / 10,
-        }),
+        totalNutrition: JSON.stringify(roundedNutrition),
         updatedAt: new Date(),
       },
     });
+
     totalMealPlansCreated++;
   }
+
   console.log(
-    `\n✅ ${totalMealPlansCreated} meal plan dibuat, ${totalBahanLinked} total bahan diproses.`
+    `\n✅ ${totalMealPlansCreated} meal plan dibuat, ${totalBahanLinked} total bahan diproses.`,
   );
-  return Object.keys(menus);
 }
 
 async function seedResep() {
@@ -453,7 +429,12 @@ async function parseDataNutrisurvey() {
       .pipe(csv({})) // Use ";" if your CSV uses semicolon
       .on("data", (row) => {
         // still wrong tho, need to get the pattern
-        if(row["Code"].startsWith("B") || row["Code"].startsWith("C") || row["Code"].startsWith("D")) return;
+        if (
+          row["Code"].startsWith("B") ||
+          row["Code"].startsWith("C") ||
+          row["Code"].startsWith("D")
+        )
+          return;
         const bahanData = {
           nama: row.Foods || row["Foods"],
           energi_kkal: parseFloat(row.energy) / 4.184 || 0,
@@ -514,26 +495,31 @@ async function parseDataNutrisurvey() {
 
 async function main() {
   console.log("--- MENGHAPUS DATA LAMA ---");
+
   await prisma.resep.deleteMany({});
   await prisma.menu.deleteMany({});
   await prisma.bahan.deleteMany({});
+
   console.log("--- MEMULAI PROSES SEEDING ---");
+
   await seedBahan();
   await parseDataNutrisurvey();
+
   const allMenusInDb = await seedMenu();
   const linkedMenus = await seedResep();
   const paketMenus = await seedMealPlan();
+
   console.log("\n\n--- LAPORAN HASIL SEEDING ---");
-  console.log(
-    `✅ Total menu individual (resep): ${allMenusInDb.length}`,
-  );
+  console.log(`✅ Total menu individual (resep): ${allMenusInDb.length}`);
   console.log(
     `🔗 Menu individual yang terhubung dengan bahan: ${linkedMenus.size}`,
   );
   console.log(
     `📦 Total menu paket (MENU 1, MENU 2, ...): ${paketMenus.length}`,
   );
+
   const unlinkedMenus = allMenusInDb.filter((menu) => !linkedMenus.has(menu));
+
   if (unlinkedMenus.length > 0) {
     console.error(
       `\n❌ DITEMUKAN ${unlinkedMenus.length} MENU YANG RESEPNYA TIDAK ADA:`,
