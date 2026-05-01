@@ -315,6 +315,8 @@ const suggestMenuStream = async (req, res) => {
       data: {
         nama: new_menu_name.toLowerCase(),
         kategori: suggested_category,
+        org_id: req.userOrgId || req.body?.orgId || req.body?.org_id || null,
+        created_by: req.userId || null,
       },
     });
 

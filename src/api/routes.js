@@ -53,6 +53,7 @@ const { updateProfile } = require("../controllers/userController");
 const { getAllUsers, approveUser, rejectUser, updateUserRole, deleteUser } = require("../controllers/adminController");
 const { signUp, signIn, signOut, adminSignIn, verifyAdmin, requireSuperAdminMiddleware } = require("../controllers/authController");
 const { requireAuth } = require("../middleware/auth");
+const { requireApprovedOrg } = require("../middleware/orgApproval");
 const router = express.Router();
 
 function sendError(res, error, fallbackStatus = 400) {
@@ -153,7 +154,7 @@ router.post("/organizations/:id/reject", requireSuperAdminMiddleware, async (req
 router.get("/menus", getMenus);
 router.post("/generate", generateNutrition);
 router.post("/suggest-menu", suggestMenu);
-router.post("/menu", createMenu);
+router.post("/menu", requireAuth, requireApprovedOrg, createMenu);
 router.post("/menu/composition", saveMenuComposition);
 router.put("/menu/:id", editMenu);
 router.get("/menu/:id", getMenuNutritionById);
@@ -171,10 +172,10 @@ router.put("/recipes/:id", updateRecipe);
 router.get("/recipes", getAllRecipes);
 router.post("/get_all_recommendations", getAllRecommendationHandler);
 // Meal Plans routes
-router.post("/meal-plans", saveMealPlan);
+router.post("/meal-plans", requireAuth, requireApprovedOrg, saveMealPlan);
 router.get("/meal-plans", getAllMealPlans);
 router.get("/meal-plans/:id", getMealPlanById);
-router.delete("/meal-plans/:id", deleteMealPlan);
+router.delete("/meal-plans/:id", requireAuth, requireApprovedOrg, deleteMealPlan);
 
 
 // Organization routes

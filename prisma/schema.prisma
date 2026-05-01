@@ -47,8 +47,12 @@ model MealPlan {
   targetClass    Float?   @default(0)
   recipes        String
   totalNutrition String
+  org_id         String?  @db.Uuid
+  created_by     String?  @db.Uuid
   createdAt      DateTime @default(now())
   updatedAt      DateTime
+  Organizations  Organizations? @relation("OrganizationMealPlans", fields: [org_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "mealplan_org_id_fkey")
+  CreatedByUser  Userext?       @relation("UserCreatedMealPlans", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "mealplan_created_by_fkey")
 
   @@schema("public")
 }
@@ -77,6 +81,10 @@ model Menu {
   id       Int     @id @default(autoincrement())
   nama     String  @unique
   kategori String
+  org_id   String?  @db.Uuid
+  created_by String? @db.Uuid
+  Organizations Organizations? @relation("OrganizationMenus", fields: [org_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "menu_org_id_fkey")
+  CreatedBy  Userext?       @relation("UserCreatedMenus", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "menu_created_by_fkey")
   Resep    Resep[]
 
   @@schema("public")
@@ -103,6 +111,8 @@ model Organizations {
   Children    Organizations[] @relation("OrganizationHierarchy")
   Membership  Membership[]
   Roles       Roles[]
+  Menus       Menu[]          @relation("OrganizationMenus")
+  MealPlans   MealPlan[]      @relation("OrganizationMealPlans")
 
   @@index([parent_id], map: "organizations_parent_id_idx")
   @@schema("public")
@@ -141,6 +151,8 @@ model Userext {
   created_at    DateTime     @default(now()) @db.Timestamptz(6)
   updated_at    DateTime     @default(now()) @db.Timestamptz(6)
   Membership    Membership[]
+  CreatedMenus  Menu[]       @relation("UserCreatedMenus")
+  CreatedMealPlans MealPlan[] @relation("UserCreatedMealPlans")
 
   @@schema("public")
 }

@@ -86,6 +86,14 @@ async function requestToJoinByCode(userId, inviteCode) {
   
   if (!org) throw new Error("Kode undangan tidak valid");
 
+  // Enforce single active organization membership per user unless user is an organization owner
+  const isOwner = await prisma.organizations.findFirst({ where: { owner_id: userId }, select: { id: true } });
+  if (!isOwner) {
+    const otherActive = await prisma.membership.findFirst({ where: { user_id: userId, status: "active" }, select: { org_id: true } });
+    if (otherActive && otherActive.org_id !== org.id) {
+      throw new Error("Anda hanya dapat menjadi anggota satu organisasi pada satu waktu");
+    }
+  }
   // Check if already a member
   const existing = await prisma.membership.findUnique({
     where: {
@@ -135,6 +143,22 @@ async function requestToJoinByCode(userId, inviteCode) {
 }
 
 async function acceptMember(memberId) {
+  // Fetch current member info
+  const current = await prisma.membership.findUnique({ where: { id: memberId } });
+  if (!current) throw new Error("Membership not found");
+
+  // Enforce single active organization membership per user unless user is an organization owner
+  const isOwner = await prisma.organizations.findFirst({ where: { owner_id: current.user_id }, select: { id: true } });
+  if (!isOwner) {
+    const otherActive = await prisma.membership.findFirst({
+      where: { user_id: current.user_id, status: "active", org_id: { not: current.org_id } },
+      select: { id: true },
+    });
+    if (otherActive) {
+      throw new Error("User already has active membership in another organization");
+    }
+  }
+
   const member = await prisma.membership.update({
     where: { id: memberId },
     data: {

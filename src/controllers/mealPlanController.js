@@ -33,6 +33,8 @@ const saveMealPlan = async (req, res) => {
         recipes: JSON.stringify(recipes),
         totalNutrition: JSON.stringify(totalNutrition),
         updatedAt: now,
+        org_id: req.userOrgId ?? null,
+        created_by: req.userId ?? null,
       },
     });
 
@@ -99,8 +101,20 @@ const getMealPlanById = async (req, res) => {
 const getAllMealPlans = async (req, res) => {
   try {
     const { limit = 1000, offset = 0 } = req.query;
+    const userId = req.userId;
+    const userOrgId = req.userOrgId || req.query.orgId || req.query.org_id || req.headers['x-org-id'] || null;
+
+    const where = {};
+    if (userOrgId) {
+      where.org_id = userOrgId;
+    } else if (userId) {
+      where.created_by = userId;
+    } else {
+      where.id = { in: [] };
+    }
 
     const mealPlans = await prisma.mealPlan.findMany({
+      where,
       take: parseInt(limit),
       skip: parseInt(offset),
       orderBy: {
@@ -108,7 +122,7 @@ const getAllMealPlans = async (req, res) => {
       },
     });
 
-    const total = await prisma.mealPlan.count();
+    const total = await prisma.mealPlan.count({ where });
 
     // Parse JSON strings for each meal plan
     const data = mealPlans.map((plan) => ({

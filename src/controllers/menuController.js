@@ -12,6 +12,23 @@ const {
 } = require("./recommendationSystemController");
 const { filterForLP } = require("./foodCategorization");
 
+function resolveOrgScope(req) {
+  return (
+    req.headers?.["x-org-id"]
+    || req.userOrgId
+    || req.query?.orgId
+    || req.query?.org_id
+    || req.body?.orgId
+    || req.body?.org_id
+    || null
+  );
+}
+
+function isMenuInScope(menu, orgId) {
+  if (!orgId) return false;
+  return menu?.org_id && String(menu.org_id) === String(orgId);
+}
+
 // ------------------------------
 const goals = {
   1: {
@@ -432,7 +449,24 @@ const searchMenus = async (req, res) => {
 // =================================================================
 const getMenus = async (req, res) => {
   try {
-    const allMenus = await prisma.menu.findMany({ orderBy: { nama: "asc" } });
+    // Scope by authenticated org when available, otherwise allow an explicit orgId query filter.
+    const userId = req.userId || req.headers?.["x-user-id"] || null;
+    const userOrgId = resolveOrgScope(req);
+
+    let allMenus;
+    if (userOrgId) {
+      allMenus = await prisma.menu.findMany({
+        where: {
+          OR: [
+            { org_id: userOrgId },
+            ...(userId ? [{ created_by: userId }] : []),
+          ],
+        },
+        orderBy: { nama: "asc" },
+      });
+    } else {
+      allMenus = [];
+    }
     const groupedMenus = allMenus.reduce(
       (acc, menu) => {
         if (acc[menu.kategori])
@@ -968,11 +1002,20 @@ const suggestMenu = async (req, res) => {
 // =================================================================
 async function createMenu(req, res) {
   const { menuName, ingredients } = req.body;
+  const orgId = resolveOrgScope(req);
+  const userId = req.userId || null;
 
   if (!menuName || !ingredients || ingredients.length === 0) {
     return res
       .status(400)
       .json({ message: "Nama menu dan bahan tidak boleh kosong." });
+  }
+
+  if (!orgId) {
+    return res.status(400).json({
+      success: false,
+      message: "orgId is required to create a menu",
+    });
   }
 
   try {
@@ -1060,6 +1103,8 @@ async function createMenu(req, res) {
         data: {
           nama: menuName.toLowerCase(),
           kategori: kategori,
+          org_id: orgId,
+          created_by: userId,
         },
       });
 
@@ -1172,6 +1217,7 @@ async function createMenu(req, res) {
 async function getRecipeNutritionById(req, res) {
   try {
     const { recipeId } = req.params;
+    const orgId = resolveOrgScope(req);
 
     console.log(`\n📊 Getting nutrition for recipe ID: ${recipeId}`);
 
@@ -1182,8 +1228,18 @@ async function getRecipeNutritionById(req, res) {
       });
     }
 
-    const menu = await prisma.menu.findUnique({
-      where: { id: parseInt(recipeId) },
+    if (!orgId) {
+      return res.status(404).json({
+        success: false,
+        message: "Resep tidak ditemukan",
+      });
+    }
+
+    const menu = await prisma.menu.findFirst({
+      where: {
+        id: parseInt(recipeId),
+        org_id: orgId,
+      },
       select: { id: true, nama: true, kategori: true },
     });
 
@@ -2005,6 +2061,7 @@ async function editMenu(req, res) {
 async function getRecipeById(req, res) {
   try {
     const { id } = req.params;
+    const orgId = resolveOrgScope(req);
 
     if (!id || isNaN(parseInt(id))) {
       return res.status(400).json({
@@ -2015,8 +2072,18 @@ async function getRecipeById(req, res) {
 
     const menuId = parseInt(id);
 
-    const menu = await prisma.menu.findUnique({
-      where: { id: menuId },
+    if (!orgId) {
+      return res.status(404).json({
+        success: false,
+        message: "Menu tidak ditemukan",
+      });
+    }
+
+    const menu = await prisma.menu.findFirst({
+      where: {
+        id: menuId,
+        org_id: orgId,
+      },
       include: {
         resep: {
           include: {
@@ -2069,6 +2136,7 @@ async function updateRecipe(req, res) {
   try {
     const { id } = req.params;
     const { nama, kategori, ingredients } = req.body;
+    const orgId = resolveOrgScope(req);
 
     console.log(`📝 [Backend] Updating recipe ID: ${id}`, {
       nama,
@@ -2093,6 +2161,13 @@ async function updateRecipe(req, res) {
       return res.status(404).json({
         success: false,
         message: "Resep tidak ditemukan",
+      });
+    }
+
+    if (!orgId || !isMenuInScope(existingMenu, orgId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Resep ini tidak tersedia untuk organisasi ini",
       });
     }
 
@@ -2191,8 +2266,15 @@ async function updateRecipe(req, res) {
 
 const getAllRecipes = async (req, res) => {
   try {
+    const orgId = resolveOrgScope(req);
+
+    if (!orgId) {
+      return res.json({ success: true, recipes: [] });
+    }
+
     // Query all recipes/menus from database with ingredients
     const menus = await prisma.menu.findMany({
+      where: { org_id: orgId },
       include: {
         Resep: {
           include: {
