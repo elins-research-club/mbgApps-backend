@@ -99,7 +99,7 @@ model OrganizationInvitation {
 
 model Menu {
   id       Int     @id @default(autoincrement())
-  nama     String  @unique
+  nama     String
   kategori String
   org_id   String?  @db.Uuid
   created_by String? @db.Uuid
