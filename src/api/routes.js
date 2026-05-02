@@ -46,6 +46,8 @@ const {
   getPendingOrganizations,
   suspendOrganization,
   unsuspendOrganization,
+  acceptOrganizationInvitation,
+  inviteOrganizationMembers,
 } = require("../controllers/organizationController");
 const {
   getOrgMembers,
@@ -262,6 +264,16 @@ router.post(
   },
 );
 
+router.post("/organizations/:id/invite-members", requireAuth, async (req, res) => {
+  try {
+    const memberEmails = Array.isArray(req.body.memberEmails) ? req.body.memberEmails : [];
+    const result = await inviteOrganizationMembers(req.params.id, req.userId, memberEmails);
+    res.status(201).json(result);
+  } catch (error) {
+    sendError(res, error, 400);
+  }
+});
+
 router.get("/organizations", async (req, res) => {
   try {
     const result = await getAllOrganizations(req.query);
@@ -401,6 +413,15 @@ router.post("/organizations/members/:memberId/reject", async (req, res) => {
     res.json(member);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+router.post("/organizations/invitations/accept", requireAuth, async (req, res) => {
+  try {
+    const token = req.body.token || req.query.token;
+    const result = await acceptOrganizationInvitation(req.userId, req.user?.email, token);
+    res.json(result);
+  } catch (error) {
+    sendError(res, error, 400);
   }
 });
 router.delete("/organizations/members/:memberId", async (req, res) => {

@@ -1,4 +1,5 @@
 const { Prisma } = require("@prisma/client");
+const crypto = require("crypto");
 const prisma = require("../lib/prisma");
 const { ensureFixedRoles } = require("./roleController");
 const supabase = require("../lib/supabase");
@@ -8,6 +9,30 @@ class ApiError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000";
+
+function hashInviteToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function buildInvitationUrl(token) {
+  return `${appUrl}/invite/accept?token=${encodeURIComponent(token)}`;
+}
+
+function normalizeEmail(email) {
+  if (typeof email !== "string") return "";
+  return email.trim().toLowerCase();
+}
+
+async function findAuthUserByEmail(email) {
+  const { data, error } = await supabase.auth.admin.listUsers();
+  if (error) {
+    throw new ApiError(500, `Failed to lookup users: ${error.message}`);
+  }
+
+  return data?.users?.find((user) => user.email?.toLowerCase() === email) || null;
 }
 
 function normalizeDescription(description) {
@@ -92,13 +117,51 @@ async function ensureCanManageOrg(tx, userId, parentOrg) {
   }
 }
 
+async function ensureCanInviteToOrg(tx, userId, orgId) {
+  const org = await tx.organizations.findUnique({
+    where: { id: orgId },
+    select: { id: true, owner_id: true },
+  });
+
+  if (!org) {
+    throw new ApiError(404, "Organization not found");
+  }
+
+  if (org.owner_id === userId) {
+    return org;
+  }
+
+  const membership = await tx.membership.findFirst({
+    where: {
+      org_id: org.id,
+      user_id: userId,
+      status: "active",
+    },
+    include: {
+      Roles: {
+        select: {
+          permissions: true,
+        },
+      },
+    },
+  });
+
+  const permissions = membership?.Roles?.permissions;
+  if (!hasOrgManagementPermission(permissions)) {
+    throw new ApiError(403, "You are not allowed to invite members to this organization");
+  }
+
+  return org;
+}
+
 /**
- * Create pending memberships for a list of email addresses
- * Looks up users in Supabase by email and creates memberships
+ * Create invitations for a list of email addresses.
+ * Existing Supabase users get a pending membership immediately.
+ * New users get a Supabase invite email and join after the callback completes.
  */
-async function createMembershipsFromEmails(tx, orgId, memberEmails = []) {
+async function inviteMembersFromEmails(tx, orgId, orgName, invitedByUserId, memberEmails = []) {
   if (!Array.isArray(memberEmails) || memberEmails.length === 0) {
-    return [];
+    return { created: [], errors: [] };
   }
 
   const results = [];
@@ -106,62 +169,140 @@ async function createMembershipsFromEmails(tx, orgId, memberEmails = []) {
 
   for (const email of memberEmails) {
     try {
-      const trimmedEmail = email.trim().toLowerCase();
+      const trimmedEmail = normalizeEmail(email);
       if (!trimmedEmail) continue;
 
-      // Look up user in Supabase by email
-      const { data: users, error: lookupError } = await supabase.auth.admin.listUsers();
-      if (lookupError) {
-        errors.push({ email: trimmedEmail, reason: "Failed to lookup users" });
+      const authUser = await findAuthUserByEmail(trimmedEmail);
+      const invitationToken = crypto.randomUUID();
+      const tokenHash = hashInviteToken(invitationToken);
+
+      const existingMembership = authUser
+        ? await tx.membership.findUnique({
+            where: {
+              org_id_user_id: {
+                org_id: orgId,
+                user_id: authUser.id,
+              },
+            },
+            select: { id: true, status: true, user_id: true },
+          })
+        : null;
+
+      if (existingMembership?.status === "active") {
+        errors.push({ email: trimmedEmail, reason: "Already active member" });
         continue;
       }
 
-      const authUser = users?.users?.find((u) => u.email?.toLowerCase() === trimmedEmail);
-      if (!authUser) {
-        errors.push({ email: trimmedEmail, reason: "User not found" });
-        continue;
-      }
+      const invitationData = {
+        org_id: orgId,
+        email: trimmedEmail,
+        token_hash: tokenHash,
+        status: "pending",
+        invited_by: invitedByUserId ?? null,
+        invite_method: "email",
+        expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14),
+      };
 
-      // Check if membership already exists
-      const existing = await tx.membership.findUnique({
-        where: {
-          org_id_user_id: {
-            org_id: orgId,
-            user_id: authUser.id,
+      let membership = existingMembership;
+
+      if (authUser) {
+        if (!membership) {
+          membership = await tx.membership.create({
+            data: {
+              org_id: orgId,
+              user_id: authUser.id,
+              status: "pending",
+              invite_method: "email",
+              invited_by: invitedByUserId ?? null,
+            },
+          });
+        }
+
+        const invitation = await tx.organizationInvitation.upsert({
+          where: {
+            org_id_email: {
+              org_id: orgId,
+              email: trimmedEmail,
+            },
           },
-        },
-        select: { id: true, status: true },
-      });
+          update: {
+            user_id: authUser.id,
+            membership_id: membership.id,
+            token_hash: tokenHash,
+            status: "pending",
+            invited_by: invitedByUserId ?? null,
+            invite_method: "email",
+            expires_at: invitationData.expires_at,
+            accepted_at: null,
+            updated_at: new Date(),
+          },
+          create: {
+            ...invitationData,
+            user_id: authUser.id,
+            membership_id: membership.id,
+          },
+        });
 
-      if (existing) {
-        errors.push({
+        results.push({
           email: trimmedEmail,
-          reason: `Already ${existing.status} member`,
+          userId: authUser.id,
+          membershipId: membership.id,
+          invitationId: invitation.id,
+          inviteUrl: buildInvitationUrl(invitationToken),
+          delivery: "existing-user-pending",
         });
         continue;
       }
 
-      // Create pending membership
-      const membership = await tx.membership.create({
-        data: {
-          org_id: orgId,
-          user_id: authUser.id,
+      const invitation = await tx.organizationInvitation.upsert({
+        where: {
+          org_id_email: {
+            org_id: orgId,
+            email: trimmedEmail,
+          },
+        },
+        update: {
+          token_hash: tokenHash,
           status: "pending",
+          invited_by: invitedByUserId ?? null,
           invite_method: "email",
+          expires_at: invitationData.expires_at,
+          accepted_at: null,
+          updated_at: new Date(),
+        },
+        create: invitationData,
+      });
+
+      const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(trimmedEmail, {
+        redirectTo: buildInvitationUrl(invitationToken),
+        data: {
+          orgId,
+          orgName,
+          invitationToken,
         },
       });
 
+      if (inviteError) {
+        await tx.organizationInvitation.update({
+          where: { id: invitation.id },
+          data: {
+            status: "failed",
+            updated_at: new Date(),
+          },
+        });
+        errors.push({ email: trimmedEmail, reason: inviteError.message });
+        continue;
+      }
+
       results.push({
         email: trimmedEmail,
-        userId: authUser.id,
-        membershipId: membership.id,
+        invitationId: invitation.id,
+        inviteUrl: buildInvitationUrl(invitationToken),
+        delivery: "email-invite",
       });
-
-      // TODO: Send invitation email here
-      // Example: await sendInvitationEmail(trimmedEmail, orgName, orgId)
     } catch (error) {
       errors.push({
-        email: email.trim(),
+        email: typeof email === "string" ? email.trim() : "",
         reason: error.message,
       });
     }
@@ -199,8 +340,8 @@ async function createOrganization(userId, { name, description, memberEmails = []
 
     await ensureFixedRoles(org.id, tx);
 
-    // Create memberships from email invitations
-    const emailResults = await createMembershipsFromEmails(tx, org.id, memberEmails);
+    // Create invitations from email addresses
+    const emailResults = await inviteMembersFromEmails(tx, org.id, org.name, userId, memberEmails);
 
     return { org, emailResults };
   });
@@ -293,8 +434,8 @@ async function createSubOrganization(userId, parentOrgId, { name, description, o
       });
     }
 
-    // Create memberships from email invitations
-    const emailResults = await createMembershipsFromEmails(tx, newOrg.id, memberEmails);
+    // Create invitations from email addresses
+    const emailResults = await inviteMembersFromEmails(tx, newOrg.id, newOrg.name, userId, memberEmails);
 
     return { org: newOrg, emailResults };
   });
@@ -563,6 +704,145 @@ async function unsuspendOrganization(orgId) {
   return mapOrganization(organization);
 }
 
+async function acceptOrganizationInvitation(userId, userEmail, token) {
+  if (!userId) {
+    throw new ApiError(401, "Not authenticated");
+  }
+
+  const normalizedEmail = normalizeEmail(userEmail);
+  const rawToken = typeof token === "string" ? token.trim() : "";
+  if (!rawToken) {
+    throw new ApiError(422, "Invitation token is required");
+  }
+
+  const invitation = await prisma.organizationInvitation.findUnique({
+    where: { token_hash: hashInviteToken(rawToken) },
+  });
+
+  if (!invitation) {
+    throw new ApiError(404, "Invitation not found");
+  }
+
+  if (invitation.status === "accepted") {
+    return {
+      invitationId: invitation.id,
+      membershipId: invitation.membership_id,
+      orgId: invitation.org_id,
+      status: invitation.status,
+    };
+  }
+
+  if (invitation.expires_at && invitation.expires_at < new Date()) {
+    throw new ApiError(410, "Invitation has expired");
+  }
+
+  if (invitation.email && normalizedEmail && invitation.email !== normalizedEmail) {
+    throw new ApiError(403, "This invitation was sent to a different email address");
+  }
+
+  if (invitation.user_id && invitation.user_id !== userId) {
+    throw new ApiError(403, "This invitation is linked to another user");
+  }
+
+  const org = await prisma.organizations.findUnique({
+    where: { id: invitation.org_id },
+    select: { id: true },
+  });
+
+  if (!org) {
+    throw new ApiError(404, "Organization not found");
+  }
+
+  const isOwner = await prisma.organizations.findFirst({
+    where: { owner_id: userId },
+    select: { id: true },
+  });
+
+  if (!isOwner) {
+    const otherActive = await prisma.membership.findFirst({
+      where: { user_id: userId, status: "active", org_id: { not: invitation.org_id } },
+      select: { id: true },
+    });
+
+    if (otherActive) {
+      throw new ApiError(409, "User already has active membership in another organization");
+    }
+  }
+
+  let membership;
+  if (invitation.membership_id) {
+    membership = await prisma.membership.update({
+      where: { id: invitation.membership_id },
+      data: {
+        status: "active",
+        joined_at: new Date(),
+      },
+    });
+  } else {
+    const existingMembership = await prisma.membership.findUnique({
+      where: {
+        org_id_user_id: {
+          org_id: invitation.org_id,
+          user_id: userId,
+        },
+      },
+      select: { id: true, status: true },
+    });
+
+    if (existingMembership) {
+      membership = await prisma.membership.update({
+        where: { id: existingMembership.id },
+        data: {
+          status: "active",
+          joined_at: new Date(),
+        },
+      });
+    } else {
+      membership = await prisma.membership.create({
+        data: {
+          org_id: invitation.org_id,
+          user_id: userId,
+          status: "active",
+          invite_method: "email",
+          invited_by: invitation.invited_by ?? null,
+          joined_at: new Date(),
+        },
+      });
+    }
+  }
+
+  const updatedInvitation = await prisma.organizationInvitation.update({
+    where: { id: invitation.id },
+    data: {
+      user_id: userId,
+      membership_id: membership.id,
+      status: "accepted",
+      accepted_at: new Date(),
+      updated_at: new Date(),
+    },
+  });
+
+  return {
+    invitationId: updatedInvitation.id,
+    membershipId: membership.id,
+    orgId: updatedInvitation.org_id,
+    status: updatedInvitation.status,
+  };
+}
+
+async function inviteOrganizationMembers(orgId, userId, memberEmails = []) {
+  if (!isUuid(orgId)) {
+    throw new ApiError(422, "Invalid organization ID");
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const org = await ensureCanInviteToOrg(tx, userId, orgId);
+    return inviteMembersFromEmails(tx, org.id, org.name || "", userId, memberEmails);
+  });
+
+  return result;
+}
+
 module.exports = {
   ApiError,
   createOrganization,
@@ -576,4 +856,6 @@ module.exports = {
   getPendingOrganizations,
   suspendOrganization,
   unsuspendOrganization,
+  acceptOrganizationInvitation,
+  inviteOrganizationMembers,
 };

@@ -209,35 +209,40 @@ Return only the JSON object.`;
 }
 
 async function validateIngredientInput(ingredientName) {
-  const prompt = `You are a strict food science validator. Determine if the input is a RAW INGREDIENT or a PROCESSED DISH/MENU.
+  const prompt = `You are a food ingredient validator. Determine if the input is an INGREDIENT (raw, processed, or condiment) or a FINISHED DISH/MEAL.
 
 INPUT: "${ingredientName}"
 
-STRICT RULES FOR RAW INGREDIENTS (✅ VALID):
-- Single unprocessed items: "ayam" (chicken), "tomat" (tomato), "bawang" (onion), "ikan" (fish), "telur" (egg)
-- Basic grains/staples: "beras" (rice), "gandum" (wheat), "jagung" (corn)
-- Fresh produce: "wortel" (carrot), "kentang" (potato), "bayam" (spinach)
+VALID INGREDIENTS (✅ ACCEPT):
+1. Raw/fresh produce: "ayam" (chicken), "tomat" (tomato), "bawang" (onion), "ikan" (fish), "telur" (egg), "daging sapi" (beef), "wortel" (carrot), "bayam" (spinach)
+2. Grains/staples: "beras" (rice), "gandum" (wheat), "jagung" (corn), "tepung" (flour), "mie" (noodles)
+3. Processed base ingredients: "tahu" (tofu), "tempe" (tempeh), "kecap manis" (sweet soy sauce), "minyak goreng" (cooking oil), "mentega" (butter), "susu" (milk), "keju" (cheese)
+4. Condiments/seasonings: "garam" (salt), "gula" (sugar), "merica" (black pepper), "cuka" (vinegar), "micin" or "MSG" (monosodium glutamate), "penyedap rasa" (flavor enhancer), "baking powder", "baking soda", "kayu manis" (cinnamon)
+5. Spices/herbs: "kunyit" (turmeric), "jahe" (ginger), "lada" (chili), "kulit manis" (cinnamon bark), "daun salam" (bay leaf), "ketumbar" (coriander)
+6. Sauces/pastes: "sambal" (chili paste), "paste tomat" (tomato paste), "kecap" (soy sauce)
 
-INDICATORS OF PROCESSED DISH/MENU (❌ INVALID - REJECT):
+INDICATORS OF FINISHED DISH/MENU (❌ REJECT):
 1. Contains cooking methods: "goreng" (fried), "bakar" (grilled), "rebus" (boiled), "tumis" (sautéed), "panggang" (roasted), "kukus" (steamed)
-2. Traditional/international dish names: "soto", "sate", "rendang", "gado-gado", "bakso", "mie goreng", "nasi goreng", "kebab", "burger", "pizza", "pasta", "curry", "stew"
-3. Prepared foods: "nugget", "sosis" (sausage), "patty", "cutlet"
-4. Combinations: "ayam bakar", "ikan goreng", "daging panggang"
-5. Street food/fast food: "kebab", "shawarma", "taco", "burrito"
+2. Dish names: "soto", "sate", "rendang", "gado-gado", "bakso", "mie goreng", "nasi goreng", "kebab", "burger", "pizza", "pasta"
+3. Combinations with cooking words: "ayam goreng", "ikan bakar", "daging panggang"
+4. Street/fast food: "kebab", "shawarma", "taco", "burrito"
 
 EXAMPLES:
-- "kebab" → REJECT (processed/grilled meat dish)
+- "micin" → ACCEPT (seasoning/flavor enhancer)
+- "garam" → ACCEPT (salt condiment)
+- "minyak" → ACCEPT (cooking oil)
 - "ayam goreng" → REJECT (fried chicken dish)
 - "nasi goreng" → REJECT (fried rice dish)
+- "kebab" → REJECT (grilled meat dish)
 - "ayam" → ACCEPT (raw chicken)
-- "daging sapi" → ACCEPT (raw beef)
+- "sambal" → ACCEPT (chili paste condiment)
 
 Return ONLY valid JSON:
 {
   "is_raw_ingredient": true/false,
   "input": "${ingredientName}",
   "reason": "Brief explanation why accepted/rejected",
-  "suggested_raw_ingredients": ["raw ingredient 1", "raw ingredient 2"]
+  "suggested_raw_ingredients": ["ingredient 1", "ingredient 2"]
 }`;
 
   try {
@@ -468,6 +473,42 @@ async function estimateIngredientWithLLM(ingredientName) {
         confidence: llm.confidence,
       };
     }
+
+    const estimated = await getLLMNutritionEstimate(ingredientName, llm);
+    if (estimated) {
+      try {
+        const savedBahan = await prisma.bahan.create({
+          data: {
+            nama: ingredientName,
+            isValidated: false,
+            ...estimated.predicted_composition,
+            validatedBy: "LLM",
+          },
+        });
+        console.log(
+          `✅ Saved direct LLM-estimated ingredient "${ingredientName}" to database with ID: ${savedBahan.id}`
+        );
+      } catch (saveError) {
+        console.error(
+          `❌ Failed to save direct LLM-estimated ingredient "${ingredientName}" to database:`,
+          saveError.message
+        );
+      }
+
+      return {
+        name: ingredientName,
+        method: "llm-estimate",
+        english_equivalent: llm.english_equivalent || null,
+        candidates: [],
+        predicted_composition: estimated.predicted_composition,
+        provenance: {
+          llm_estimate: estimated.provenance || {},
+          llm_candidates: llm.candidates || [],
+          tkpi_candidates: [],
+        },
+        confidence: estimated.confidence,
+      };
+    }
   } catch (err) {
     console.error("DB lookup error in estimateIngredientWithLLM:", err);
   }
@@ -589,6 +630,70 @@ Return only the JSON object:`;
   }
 
   return { ingredient_name: ingredientName, candidates: [], confidence: 0 };
+}
+
+async function getLLMNutritionEstimate(ingredientName, llmContext = {}) {
+  const nutrientFields = NUTRIENTS.map((n) => `"${n}": number`).join(",\n  ");
+  const prompt = `You are a food composition expert.
+
+Estimate the nutrition per 100 grams for this ingredient: "${ingredientName}".
+
+Use the ingredient itself, common food composition knowledge, and the context below if helpful:
+- english_equivalent: ${llmContext.english_equivalent || ""}
+- candidate_matches: ${JSON.stringify(llmContext.candidates || [])}
+
+Return ONLY valid JSON with this exact structure:
+{
+  ${nutrientFields},
+  "confidence": 0.0,
+  "basis": "short explanation of the estimate"
+}
+
+Rules:
+- Return numbers for every nutrient key.
+- If a nutrient is unknown, use 0.
+- Confidence must be between 0 and 1.
+- Do not return markdown or extra text.
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+
+    let cleaned = text.replace(/```json|```/g, "").trim();
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+
+    if (first === -1 || last === -1) {
+      return null;
+    }
+
+    cleaned = cleaned.substring(first, last + 1);
+    const parsed = JSON.parse(cleaned);
+
+    const predicted_composition = {};
+    for (const nutrient of NUTRIENTS) {
+      const value = Number(parsed[nutrient]);
+      predicted_composition[nutrient] = Number.isFinite(value) ? value : 0;
+    }
+
+    return {
+      predicted_composition,
+      confidence:
+        typeof parsed.confidence === "number" && parsed.confidence >= 0 && parsed.confidence <= 1
+          ? parsed.confidence
+          : 0.5,
+      provenance: {
+        basis: parsed.basis || "LLM direct estimation",
+        english_equivalent: llmContext.english_equivalent || "",
+        candidate_matches: llmContext.candidates || [],
+      },
+    };
+  } catch (error) {
+    console.error("Error estimating nutrition with LLM:", error.message);
+    return null;
+  }
 }
 
 async function getNotValidatedIngredients(req, res) {
