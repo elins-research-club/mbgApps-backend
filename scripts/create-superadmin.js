@@ -1,7 +1,5 @@
-const { PrismaClient } = require("@prisma/client");
 const crypto = require("crypto");
-
-const prisma = new PrismaClient();
+const prisma = require("../lib/prisma");
 
 /**
  * Script to create a Super Admin user for testing
