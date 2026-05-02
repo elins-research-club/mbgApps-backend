@@ -5,6 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "db:seed": "node src/scripts/seed.js",
+    "db:seed_mealplan": "node src/scripts/seedMealPlanOnly.js",
     "db:create-superadmin": "node scripts/create-superadmin.js",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",

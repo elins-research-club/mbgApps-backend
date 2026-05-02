@@ -3,6 +3,7 @@ const path = require("path");
 const csv = require("csv-parser");
 const prisma = require("../lib/prisma");
 const { determineCategory } = require("../controllers/foodCategorization");
+const { randomUUID } = require("crypto");
 // KAMUS ALIAS BAHAN
 const stillMissing = [
   "bakso",
@@ -236,37 +237,37 @@ async function seedBahan() {
 }
 
 // --- FUNGSI DENGAN PERBAIKAN: MENAMBAHKAN 'return allMenus' ---
-async function seedMenu() {
-  console.log("🍽 Tahap 2: Membaca daftar menu utama...");
-  const allMenus = [];
-  const filePath = path.join(__dirname, "../data/csv/menu.csv");
-  const records = await processCsv(filePath, { headers: false, skipLines: 1 });
-  const kategoriMapping = {
-    Karbohidrat: "karbohidrat", // bukan "karbo"
-    "Protein hewani": "proteinHewani", // bukan "lauk"
-    Sayuran: "sayur",
-    "Protein tambahan": "proteinTambahan", // bukan "side_dish"
-    Buah: "buah",
-  };
-  for (const row of records) {
-    const kategori = kategoriMapping[row["0"]];
-    if (kategori) {
-      for (let i = 2; i < Object.keys(row).length; i++) {
-        const namaMenu = cleanString(row[String(i)]); // Gunakan pembersih
-        if (namaMenu) {
-          allMenus.push(namaMenu);
-          await prisma.menu.upsert({
-            where: { nama: namaMenu },
-            update: {},
-            create: { nama: namaMenu, kategori: kategori },
-          });
-        }
-      }
-    }
-  }
-  console.log("✅ Daftar menu berhasil dimasukkan.");
-  return allMenus;
-}
+// async function seedMenu() {
+//   console.log("🍽 Tahap 2: Membaca daftar menu utama...");
+//   const allMenus = [];
+//   const filePath = path.join(__dirname, "../data/csv/menu.csv");
+//   const records = await processCsv(filePath, { headers: false, skipLines: 1 });
+//   const kategoriMapping = {
+//     Karbohidrat: "karbohidrat", // bukan "karbo"
+//     "Protein hewani": "proteinHewani", // bukan "lauk"
+//     Sayuran: "sayur",
+//     "Protein tambahan": "proteinTambahan", // bukan "side_dish"
+//     Buah: "buah",
+//   };
+//   for (const row of records) {
+//     const kategori = kategoriMapping[row["0"]];
+//     if (kategori) {
+//       for (let i = 2; i < Object.keys(row).length; i++) {
+//         const namaMenu = cleanString(row[String(i)]); // Gunakan pembersih
+//         if (namaMenu) {
+//           allMenus.push(namaMenu);
+//           await prisma.menu.upsert({
+//             where: { nama: namaMenu },
+//             update: {},
+//             create: { nama: namaMenu, kategori: kategori },
+//           });
+//         }
+//       }
+//     }
+//   }
+//   console.log("✅ Daftar menu berhasil dimasukkan.");
+//   return allMenus;
+// }
 
 // Fungsi helper untuk menentukan kategori berdasarkan nama file resep
 function determineMenuCategory(recipeFileName) {
@@ -282,19 +283,35 @@ async function seedMealPlan() {
   console.log("🍽 Seeding meal plans dari menu_catering.csv...");
   const filePath = path.join(__dirname, "../data/csv/menu_catering.csv");
   const records = await processCsv(filePath, { headers: true });
-
+  const sp1 = "c19806a8-0877-4425-b28a-5e820292cde6";
+  const sp2 = "8daf3df4-3c93-413a-bcc2-14646562c538";
+  const sp3 = "199d12e9-84e7-437e-b373-408511e78f16";
   let totalMealPlansCreated = 0;
-
+  const totalRecords = records.length;
+  console.log(`Total records to process: ${totalRecords}`);
+  console.log(`Records: ${JSON.stringify(records)}`);
   for (const row of records) {
-    const menuName = cleanString(row["MENU NO"] || "");
+    console.log(`\nProcessing row: ${JSON.stringify(row)}`);
+    const mealID = randomUUID();
+    const org_id =
+      totalMealPlansCreated >= (2 * totalRecords) / 3
+        ? sp3
+        : totalMealPlansCreated >= totalRecords / 3
+          ? sp2
+          : sp1;
+    console.log(`  🆔 Generated meal ID: ${mealID}`);
+    console.log(`  🏢 Assigned org ID: ${org_id}`);
+    // const menuName = cleanString(row["MENU NO"] || "");
+    const menuName = cleanString(row["_0"] || "");
+    console.log(`  📋 Menu name: '${menuName}'`);
     if (!menuName || !menuName.match(/^Menu \d+$/i)) continue;
 
     const columnMap = [
-      { col: "KARBOHIDRAT (100gr)", kategori: "karbohidrat" },
-      { col: "PROTEIN HEWANI (100gr)", kategori: "proteinHewani" },
-      { col: "SAYURAN (50gr)", kategori: "sayuran" },
-      { col: "PROTEIN TAMBAHAN (40gr)", kategori: "proteinTambahan" },
-      { col: "BUAH (100gr)", kategori: "buah" },
+      { col: "_1", kategori: "karbohidrat" },
+      { col: "_2", kategori: "proteinHewani" },
+      { col: "_3", kategori: "sayuran" },
+      { col: "_4", kategori: "proteinTambahan" },
+      { col: "_5", kategori: "buah" },
     ];
 
     console.log(`\n  📦 ${menuName}:`);
@@ -324,13 +341,15 @@ async function seedMealPlan() {
     };
 
     for (const { col, kategori } of columnMap) {
+      console.log(`    🔍 Mencari resep untuk kategori '${kategori}'...`);
+      console.log(`    📊 Data mentah: '${row[col]}'`);
       const recipeName = cleanString(row[col] || "");
       if (!recipeName) continue;
-
+      console.log(`    🔎 Looking for recipe: '${recipeName}'`);
       const recipeMenu = await prisma.menu.findUnique({
         where: { nama: recipeName },
       });
-
+      console.log(`    🔍 Recipe lookup result: ${recipeMenu ? "FOUND" : "NOT FOUND"}`,);
       if (!recipeMenu) {
         console.log(`    ⚠️  Tidak ditemukan: ${recipeName}`);
         continue;
@@ -393,19 +412,21 @@ async function seedMealPlan() {
     });
 
     await prisma.mealPlan.upsert({
-      where: { id: menuName },
+      where: { id: mealID },
       update: {
         name: menuName,
         recipes: JSON.stringify(resolvedRecipes),
         totalNutrition: JSON.stringify(totalNutrition),
         updatedAt: new Date(),
+        org_id: org_id,
       },
       create: {
-        id: menuName,
+        id: mealID,
         name: menuName,
         recipes: JSON.stringify(resolvedRecipes),
         totalNutrition: JSON.stringify(totalNutrition),
         updatedAt: new Date(),
+        org_id: org_id,
       },
     });
 
@@ -544,6 +565,120 @@ async function parseDataNutrisurvey() {
   console.log(`Processed ${records.length} rows from CSV.`);
 }
 
+async function seedResepNew() {
+  console.log("🍳 Tahap 3: Seed resep + auto create menu...");
+
+  const fileKategoriMap = {
+    "new-buah-susu.csv": "buah",
+    "new-nasi-putih.csv": "karbohidrat",
+    "new-sayuran.csv": "sayur",
+    "new-protein.csv": "proteinHewani",
+    "new-protein-tambahan.csv": "proteinTambahan",
+  };
+
+  const successfullyLinkedMenus = new Set();
+
+  for (const [file, kategori] of Object.entries(fileKategoriMap)) {
+    console.log(`📄 Processing ${file} (${kategori})...`);
+
+    const filePath = path.join(__dirname, `../data/csv/${file}`);
+    const rows = await processCsv(filePath, { headers: true });
+
+    for (const row of rows) {
+      // 🔥 support both header + fallback index
+      const recipeName = cleanString(
+        row["Recipe Name"] ?? row["_0"]
+      );
+
+      const originalIngredientName = cleanString(
+        row["Ingredient"] ?? row["_2"]
+      );
+
+      const quantityRaw = row["Qty"] ?? row["_4"];
+      const quantity = parseFloat(
+        String(quantityRaw || "").replace(",", ".")
+      );
+
+      // 🚫 skip invalid / header rows
+      if (
+        !recipeName ||
+        recipeName.toLowerCase().includes("recipe") ||
+        !originalIngredientName ||
+        isNaN(quantity)
+      ) {
+        continue;
+      }
+
+      // 🔹 normalize ingredient
+      const finalIngredientName =
+        bahanAliasMapping[originalIngredientName] || originalIngredientName;
+
+      // 🔹 UPSERT MENU (safe)
+      const menu = await prisma.menu.upsert({
+        where: { nama: recipeName },
+        update: {},
+        create: {
+          nama: recipeName,
+          kategori: kategori,
+        },
+      });
+
+      // 🔹 find bahan
+      let bahan = await prisma.bahan.findUnique({
+        where: { nama: finalIngredientName },
+      });
+
+      if (!bahan) {
+        bahan = await prisma.bahan.findFirst({
+          where: {
+            nama: {
+              startsWith: finalIngredientName,
+            },
+          },
+        });
+      }
+
+      if (!bahan) {
+        console.warn(`⚠️ Bahan tidak ditemukan: ${finalIngredientName}`);
+        continue;
+      }
+
+      // 🔥 MANUAL UPSERT (no schema change)
+      const existing = await prisma.resep.findFirst({
+        where: {
+          menu_id: menu.id,
+          bahan_id: bahan.id,
+        },
+      });
+
+      if (existing) {
+        await prisma.resep.update({
+          where: { id: existing.id },
+          data: {
+            gramasi: quantity,
+          },
+        });
+      } else {
+        await prisma.resep.create({
+          data: {
+            menu_id: menu.id,
+            bahan_id: bahan.id,
+            gramasi: quantity,
+          },
+        });
+      }
+
+      successfullyLinkedMenus.add(menu.nama);
+    }
+  }
+
+  console.log(
+    `✅ Resep + menu selesai. Total menu: ${successfullyLinkedMenus.size}`
+  );
+
+  return successfullyLinkedMenus;
+}
+
 async function main() {
   console.log("--- MENGHAPUS DATA LAMA ---");
 
@@ -556,8 +691,8 @@ async function main() {
   await seedBahan();
   await parseDataNutrisurvey();
 
-  const allMenusInDb = await seedMenu();
-  const linkedMenus = await seedResep();
+  // const allMenusInDb = await seedMenu();
+  const linkedMenus = await seedResepNew();
   const paketMenus = await seedMealPlan();
 
   console.log("\n\n--- LAPORAN HASIL SEEDING ---");
@@ -585,12 +720,17 @@ async function main() {
   console.log("--- -------------------- ---\n");
 }
 
-main()
-  .catch((e) => {
-    console.error("❌ Terjadi error:", e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-    console.log("--- KONEKSI DATABASE DITUTUP ---");
-  });
+// main()
+//   .catch((e) => {
+//     console.error("❌ Terjadi error:", e);
+//     process.exit(1);
+//   })
+//   .finally(async () => {
+//     await prisma.$disconnect();
+//     console.log("--- KONEKSI DATABASE DITUTUP ---");
+//   });
+
+module.exports = {
+  seedMealPlan,
+  seedResepNew
+};

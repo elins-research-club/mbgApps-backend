@@ -1,13 +1,7 @@
-const { createClient } = require("@supabase/supabase-js");
 const crypto = require("crypto");
 
 const prisma = require("../lib/prisma");
-
-// Create Supabase client with service role key for admin operations
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-);
+const supabase = require("../lib/supabase");
 
 /**
  * Sign up a new user

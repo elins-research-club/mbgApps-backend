@@ -1,12 +1,7 @@
 const { Prisma } = require("@prisma/client");
-const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 const { ensureFixedRoles } = require("./roleController");
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-);
+const supabase = require("../lib/supabase");
 
 class ApiError extends Error {
   constructor(status, message) {
