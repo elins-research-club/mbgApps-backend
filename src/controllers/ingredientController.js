@@ -208,6 +208,7 @@ Return only the JSON object.`;
   }
 }
 
+// Guardrail function to validate if input is a raw ingredient or a processed dish
 async function validateIngredientInput(ingredientName) {
   const prompt = `You are a food ingredient validator. Determine if the input is an INGREDIENT (raw, processed, or condiment) or a FINISHED DISH/MEAL.
 
@@ -220,12 +221,18 @@ VALID INGREDIENTS (✅ ACCEPT):
 4. Condiments/seasonings: "garam" (salt), "gula" (sugar), "merica" (black pepper), "cuka" (vinegar), "micin" or "MSG" (monosodium glutamate), "penyedap rasa" (flavor enhancer), "baking powder", "baking soda", "kayu manis" (cinnamon)
 5. Spices/herbs: "kunyit" (turmeric), "jahe" (ginger), "lada" (chili), "kulit manis" (cinnamon bark), "daun salam" (bay leaf), "ketumbar" (coriander)
 6. Sauces/pastes: "sambal" (chili paste), "paste tomat" (tomato paste), "kecap" (soy sauce)
+7. Ultra-processed foods/products are also valid as ingredients: "mie instan", "sosis", "nugget", "kornet", "burger patty", "pizza beku", "saus botolan", "cereal", "biskuit"
+
+IMPORTANT ACCEPT RULE:
+- If the input is an ultra-processed food product (packaged/industrial), ACCEPT it even if the name sounds like a dish.
+- Only reject clearly cooked/fresh prepared meals (restaurant/home-cooked menu) that are not ingredient-like.
 
 INDICATORS OF FINISHED DISH/MENU (❌ REJECT):
 1. Contains cooking methods: "goreng" (fried), "bakar" (grilled), "rebus" (boiled), "tumis" (sautéed), "panggang" (roasted), "kukus" (steamed)
-2. Dish names: "soto", "sate", "rendang", "gado-gado", "bakso", "mie goreng", "nasi goreng", "kebab", "burger", "pizza", "pasta"
+2. Dish names (fresh prepared meals): "soto", "sate", "rendang", "gado-gado", "bakso", "mie goreng", "nasi goreng"
 3. Combinations with cooking words: "ayam goreng", "ikan bakar", "daging panggang"
-4. Street/fast food: "kebab", "shawarma", "taco", "burrito"
+4. Street/fast food meals (unless explicitly industrial/packaged product): "kebab", "shawarma", "taco", "burrito"
+
 
 EXAMPLES:
 - "micin" → ACCEPT (seasoning/flavor enhancer)
